@@ -1,6 +1,8 @@
+import axios from "axios";
 import User from "../models/userModal.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import QueryString from "qs";
 
 // register a new user to connectify
 export const registerUser = async (req, res) => {
@@ -27,9 +29,15 @@ export const registerUser = async (req, res) => {
         expiresIn: "1d",
       }
     );
+    const userResponse = {
+      _id: newUser._id,
+      username: newUser.username,
+      email: newUser.email,
+      name: newUser.name,
+    };
     return res
       .status(201)
-      .json({ isSuccess: true, token: token, userId: newUser._id });
+      .json({ isSuccess: true, token: token, user: userResponse });
   } catch (error) {
     console.log(error);
     return res.status(500).json({
@@ -373,5 +381,81 @@ export const getFollowing = async (req, res) => {
       message: "Something went wrong",
       isSuccess: false,
     });
+  }
+};
+
+const getGoogleAuthToken = async (code) => {
+  const url = "https://oauth2.googleapis.com/token";
+
+  const values = {
+    code,
+    client_id: process.env.GOOGLE_CLIENT_ID,
+    client_secret: process.env.GOOGLE_CLIENT_SECREAT,
+    redirect_uri: process.env.GOOGLE_OAUTH_REDIRECT_URI,
+    grant_type: "authorization_code",
+  };
+
+  console.log(values);
+  try {
+    const res = await axios.post(url, QueryString.stringify(values), {
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+      },
+    });
+    console.log("response:", res);
+
+    return res.data;
+  } catch (error) {
+    console.log("getTokenError", error.message);
+  }
+};
+
+export const googleAuthentication = async (req, res) => {
+  const { code } = req.query;
+
+  try {
+    return res.redirect(process.env.REACT_REDIRECT_URI + code);
+  } catch (error) {
+    return res.status(404).json({ message: "something went wrong" });
+  }
+};
+
+export async function getGoogleUser({ id_token, access_token }) {
+  try {
+    const res = await axios.get(
+      `https://www.googleapis.com/oauth2/v1/userinfo?alt=json&access_token=${access_token}`,
+      {
+        headers: {
+          Authorization: `Bearer ${id_token}`,
+        },
+      }
+    );
+    console.log("authenticated user", res.data);
+    return res.data;
+  } catch (error) {
+    console.log(error, "Error fetching Google user");
+    throw new Error(error.message);
+  }
+}
+
+export const googleAuthenticate = async (req, res) => {
+  const { code } = req.query;
+
+  try {
+    const { id_token, access_token } = await getGoogleAuthToken(code);
+
+    const googleUser = await getGoogleUser({ id_token, access_token });
+
+    if (!googleUser.verified_email) {
+      return res.status(403).send("Google account is not verified");
+    }
+
+    const existingUser = await User.findOne({ email: googleUser.email });
+
+    return res
+      .status(201)
+      .json({ isSuccess: true, user: googleUser, existingUser: existingUser });
+  } catch (error) {
+    return res.status(404).json({ message: "something went wrong" });
   }
 };

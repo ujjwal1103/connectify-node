@@ -28,8 +28,7 @@ app.use("/api", commentRouter);
 app.use("/api", chatRouter);
 app.use("/api", messageRouter);
 app.all("/api/*", (req, res) => {
-  console.log(req)
-  res.status(404).json({ error: "Resource not found", isSuccess: false, pathname: req.pathname });
+  return res.status(404).json({ error: "Resource not found", isSuccess: false, pathname: req.pathname });
 });
 
 mongoose
