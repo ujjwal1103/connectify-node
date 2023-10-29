@@ -24,6 +24,9 @@ const messageSchema = new mongoose.Schema({
     ref: "Chat",
     required: true,
   },
+  seenAt: {
+    type: Date,
+  }
 },{timestamps: true});
 
 const Message = mongoose.model("Message", messageSchema);
