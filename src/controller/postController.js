@@ -85,7 +85,7 @@ export const fetchAllPostsByUserId = async (req, res) => {
   try {
     const posts = await Post.find({ userId }).sort({
       createdAt: -1,
-    });
+    }).populate("userId", "username name _id profilePicture");
   
     return res.status(200).json({
       posts: posts,
