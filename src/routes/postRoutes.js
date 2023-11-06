@@ -14,7 +14,7 @@ import {
 
 router.post("/post", verifyToken, createPost);
 router.get("/posts", verifyToken, fetchAllPosts);
-router.get("/post/postId", verifyToken, getSinglePost);
+router.get("/post/:postId", verifyToken, getSinglePost);
 router.get("/users/posts", verifyToken, fetchAllPostsByUser);
 router.get("/users/:userId", verifyToken, fetchAllPostsByUserId);
 router.put("/like/:postId", verifyToken, likePosts);
