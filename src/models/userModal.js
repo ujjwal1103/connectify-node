@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { urlValidator } from "../utils/index.js";
 
 const userSchema = new mongoose.Schema(
   {
@@ -30,6 +31,10 @@ const userSchema = new mongoose.Schema(
     },
     profilePicture: {
       type: String,
+      validate: {
+        validator: urlValidator,
+        message: 'Invalid URL format',
+      },
     },
     coverPhoto: {
       type: String,

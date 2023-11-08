@@ -45,7 +45,7 @@ export const createPost = async (req, res) => {
 export const fetchAllPosts = async (req, res) => {
   try {
     const posts = await Post.find()
-      .populate("userId", "-password -__v")
+      .populate("userId", "username name _id profilePicture")
       .sort({ updatedAt: -1 });
     return res.status(200).json({
       posts: posts,
@@ -65,7 +65,9 @@ export const fetchAllPostsByUser = async (req, res) => {
   const { userId } = req.user;
 
   try {
-    const posts = await Post.find({ userId }).sort({ createdAt: -1 });
+    const posts = await Post.find({ userId })
+      .sort({ createdAt: -1 })
+      .populate("userId", "username name _id profilePicture");
 
     return res.status(200).json({
       posts: posts,
@@ -197,7 +199,10 @@ export const deletePost = async (req, res) => {
 export const getSinglePost = async (req, res) => {
   const { postId } = req.params;
   try {
-    const post = await Post.findById(postId);
+    const post = await Post.findById(postId).populate(
+      "userId",
+      "username name _id profilePicture"
+    );
     if (post) {
       return res.status(200).json({
         message: "post fetched successfully",

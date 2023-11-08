@@ -24,3 +24,9 @@ export function formatDateDifference(date) {
     return `${seconds}s`;
   }
 }
+
+export const urlValidator = (url) => {
+  // Regular expression to match a URL pattern
+  const urlRegex = /^(https?|ftp):\/\/[^\s/$.?#].[^\s]*$/;
+  return urlRegex.test(url);
+};

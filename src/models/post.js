@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-
+import { urlValidator } from "../utils/index.js";
 const postSchema = new mongoose.Schema(
   {
     caption: {
@@ -14,6 +14,10 @@ const postSchema = new mongoose.Schema(
     imageUrl: {
       type: String,
       required: true,
+      validate: {
+        validator: urlValidator,
+        message: "Invalid URL format",
+      },
     },
     userId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -33,8 +37,7 @@ const postSchema = new mongoose.Schema(
         type: mongoose.Schema.Types.ObjectId,
         ref: "Comment",
       },
-    ]
-   
+    ],
   },
   { timestamps: true }
 );

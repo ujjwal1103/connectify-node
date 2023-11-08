@@ -325,9 +325,9 @@ export const searchUsers = async (req, res) => {
           { name: { $regex: query, $options: "i" } }, // Case-insensitive search for name
           { username: { $regex: query, $options: "i" } }, // Case-insensitive search for username
         ],
-      }).select("-password -__v");
+      }).select("_id username");
 
-      console.log(users);
+     
       return res.status(200).json({
         users: users,
         isSuccess: true,
