@@ -3,7 +3,7 @@ import User from "../models/userModal.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import QueryString from "qs";
-import { uploadImage } from "../utils/uploadImage.js";
+import { deleteImage, uploadImage } from "../utils/uploadImage.js";
 
 // register a new user to connectify
 export const registerUser = async (req, res) => {
@@ -282,15 +282,17 @@ export const deleteUser = async (req, res) => {
 export const editUser = async (req, res) => {
   const { userId } = req.user;
   const { username, bio, name, profilePicture, gender } = req.body;
+
   try {
     const user = await User.findById(userId);
-
+    let url = "";
     if (user) {
-      const url = await uploadImage(
-        profilePicture,
-        "profilePics",
-        user?.username
-      );
+      if (req.file) {
+        url = await uploadImage(req.file.originalname, "profilePics");
+      }
+      else{
+        deleteImage(user?.profilePicture);
+      }
       const result = await User.findByIdAndUpdate(
         userId,
         { username, bio, name, profilePicture: url, gender },
@@ -327,7 +329,6 @@ export const searchUsers = async (req, res) => {
         ],
       }).select("_id username");
 
-     
       return res.status(200).json({
         users: users,
         isSuccess: true,

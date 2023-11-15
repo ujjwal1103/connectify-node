@@ -1,4 +1,18 @@
 import jwt from "jsonwebtoken";
+import multer from "multer";
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, "public/images");
+  },
+  filename: function (req, file, cb) {
+    if (file) {
+      cb(null, file?.originalname || "");
+    }
+  },
+});
+
+export const upload = multer({ storage: storage });
 
 // Define a middleware function for token verification
 export function verifyToken(req, res, next) {

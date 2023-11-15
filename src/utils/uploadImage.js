@@ -1,14 +1,23 @@
-import { ref, getDownloadURL, uploadString, deleteObject } from "firebase/storage";
+import {
+  ref,
+  getDownloadURL,
+  deleteObject,
+  uploadBytes,
+} from "firebase/storage";
 import { storage } from "../firebase.config.js";
-
-export const uploadImage = async (file, foldername, filename) => {
+import fs from "fs";
+export const uploadImage = async (filename, foldername) => {
   try {
     const storageRef = ref(storage, `${foldername}/${filename}`);
 
-    const snapshot = await uploadString(storageRef, file, "data_url");
-    const downloadURL = await getDownloadURL(snapshot.ref);
+    const file = fs.readFileSync(`public/images/${filename}`);
 
-    console.log("File successfully uploaded.");
+    const snapshot = await uploadBytes(storageRef, file);
+
+    const downloadURL = await getDownloadURL(snapshot.ref);
+    if (downloadURL) {
+      fs.unlinkSync(`public/images/${filename}`);
+    }
 
     return downloadURL;
   } catch (error) {
@@ -18,6 +27,7 @@ export const uploadImage = async (file, foldername, filename) => {
 };
 
 export const deleteImage = async (image) => {
+  if (!image) return;
   const storageRef = ref(storage, image);
   try {
     await deleteObject(storageRef);

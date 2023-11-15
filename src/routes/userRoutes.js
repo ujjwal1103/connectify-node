@@ -14,7 +14,11 @@ import {
   googleAuthentication,
   googleAuthenticate,
 } from "../controller/userController.js";
-import { validateUsernamePassword, verifyToken } from "../middleware/index.js";
+import {
+  upload,
+  validateUsernamePassword,
+  verifyToken,
+} from "../middleware/index.js";
 const router = express.Router();
 
 // register router
@@ -26,7 +30,7 @@ router.get("/user/:username", verifyToken, getUserByUsername);
 router.get("/users", verifyToken, getUsers);
 router.put("/sendFriendReq", verifyToken, sendFriendRequest);
 router.delete("/user", verifyToken, deleteUser);
-router.put("/user/edit", verifyToken, editUser);
+router.put("/user/edit", verifyToken, upload.single("image"), editUser);
 router.get("/users/search", verifyToken, searchUsers);
 router.get("/user/followers/:userId", getFollowers);
 router.get("/user/following/:userId", getFollowing);

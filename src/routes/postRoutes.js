@@ -1,6 +1,6 @@
 import express from "express";
 const router = express.Router();
-import { verifyToken } from "../middleware/index.js";
+import { upload, verifyToken } from "../middleware/index.js";
 import {
   createPost,
   fetchAllPosts,
@@ -9,10 +9,10 @@ import {
   deletePost,
   unlikePost,
   fetchAllPostsByUserId,
-  getSinglePost
+  getSinglePost,
 } from "../controller/postController.js";
 
-router.post("/post", verifyToken, createPost);
+router.post("/post", verifyToken, upload.single("imageUrl"), createPost);
 router.get("/posts", verifyToken, fetchAllPosts);
 router.get("/post/:postId", verifyToken, getSinglePost);
 router.get("/users/posts", verifyToken, fetchAllPostsByUser);

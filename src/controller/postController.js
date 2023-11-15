@@ -1,10 +1,9 @@
-import Notification from "../models/notification.js";
 import Post from "../models/post.js";
 import User from "../models/userModal.js";
 import { deleteImage, uploadImage } from "../utils/uploadImage.js";
 
 export const createPost = async (req, res) => {
-  let { caption, imageUrl, hashtags = [] } = req.body;
+  let { caption, hashtags = [] } = req.body;
 
   let hashtagMatches = caption.match(/#(\w+)/g);
   hashtags = hashtagMatches
@@ -12,8 +11,8 @@ export const createPost = async (req, res) => {
     : [];
 
   try {
-    const currentDate = new Date();
-    const url = await uploadImage(imageUrl, "posts", currentDate.toString());
+    const url = await uploadImage(req.file.originalname, "posts");
+    
     const newPost = {
       caption,
       imageUrl: url,
