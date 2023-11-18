@@ -281,7 +281,7 @@ export const deleteUser = async (req, res) => {
 
 export const editUser = async (req, res) => {
   const { userId } = req.user;
-  const { username, bio, name, profilePicture, gender } = req.body;
+  const { username, bio, name, gender } = req.body;
 
   try {
     const user = await User.findById(userId);
@@ -289,8 +289,7 @@ export const editUser = async (req, res) => {
     if (user) {
       if (req.file) {
         url = await uploadImage(req.file.originalname, "profilePics");
-      }
-      else{
+      } else {
         deleteImage(user?.profilePicture);
       }
       const result = await User.findByIdAndUpdate(
@@ -354,7 +353,10 @@ export const getFollowers = async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const user = await User.findOne({ _id: userId }).populate("followers");
+    const user = await User.findOne({ _id: userId }).populate({
+      path: "followers",
+      select: "_id username profilePicture",
+    });
     if (user) {
       return res.status(200).json({
         users: user.followers,
@@ -376,7 +378,10 @@ export const getFollowing = async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const user = await User.findOne({ _id: userId }).populate("following");
+    const user = await User.findOne({ _id: userId }).populate({
+      path: "following",
+      select: "_id username profilePicture",
+    });
     if (user) {
       return res.status(200).json({
         users: user.following,
