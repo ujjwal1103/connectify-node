@@ -23,6 +23,8 @@ export const sendMessage = async (req, res) => {
       });
     }
 
+    //
+
     // Create a new message
     const newMessage = new Message({
       from,
@@ -38,13 +40,20 @@ export const sendMessage = async (req, res) => {
 
     const message = newMessage.save();
 
+    // add this message as last message in the chat model
+    await Chat.findByIdAndUpdate(
+      { _id: chat },
+      { lastMessage: message._id },
+      { new: true }
+    );
+
     return res.status(200).json({
       isSuccess: true,
       message: message,
     });
   } catch (error) {
     return res.status(500).json({
-      error: err.message,
+      error: error.message,
       isSuccess: false,
     });
   }

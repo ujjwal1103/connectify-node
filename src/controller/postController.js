@@ -12,7 +12,7 @@ export const createPost = async (req, res) => {
 
   try {
     const url = await uploadImage(req.file.originalname, "posts");
-    
+
     const newPost = {
       caption,
       imageUrl: url,
@@ -42,10 +42,22 @@ export const createPost = async (req, res) => {
 
 // fetch all posts
 export const fetchAllPosts = async (req, res) => {
+  const { userId } = req.user;
+
   try {
-    const posts = await Post.find()
+    let posts = await Post.find()
       .populate("userId", "username name _id profilePicture")
-      .sort({ updatedAt: -1 });
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    posts = posts.map((post) => {
+      if (post.likedBy?.some((id) => id.toString() === userId)) {
+        return { ...post, isLiked: true };
+      } else {
+        return { ...post, isLiked: false };
+      }
+    });
+
     return res.status(200).json({
       posts: posts,
       message: "posts fetched successfully",
@@ -64,9 +76,18 @@ export const fetchAllPostsByUser = async (req, res) => {
   const { userId } = req.user;
 
   try {
-    const posts = await Post.find({ userId })
+    let posts = await Post.find({ userId })
       .sort({ createdAt: -1 })
-      .populate("userId", "username name _id profilePicture");
+      .populate("userId", "username name _id profilePicture")
+      .lean();
+
+    posts = posts.map((post) => {
+      if (post.likedBy?.some((id) => id.toString() === userId)) {
+        return { ...post, isLiked: true };
+      } else {
+        return { ...post, isLiked: false };
+      }
+    });
 
     return res.status(200).json({
       posts: posts,
@@ -86,11 +107,20 @@ export const fetchAllPostsByUserId = async (req, res) => {
   const { userId } = req.params;
 
   try {
-    const posts = await Post.find({ userId })
+    let posts = await Post.find({ userId })
       .sort({
         createdAt: -1,
       })
-      .populate("userId", "username name _id profilePicture");
+      .populate("userId", "username name _id profilePicture")
+      .lean();
+
+    posts = posts.map((post) => {
+      if (post.likedBy?.some((id) => id.toString() === userId)) {
+        return { ...post, isLiked: true };
+      } else {
+        return { ...post, isLiked: false };
+      }
+    });
 
     return res.status(200).json({
       posts: posts,
@@ -120,11 +150,8 @@ export const likePosts = async (req, res) => {
     if (!updatedPost) {
       return res.status(404).json({ message: "Post not found" });
     }
-
     return res.status(200).json({
-      post: updatedPost,
       message: "post liked successfully",
-
       isSuccess: true,
     });
   } catch (error) {
@@ -155,7 +182,6 @@ export const unlikePost = async (req, res) => {
     }
 
     return res.status(200).json({
-      post: updatedPost,
       message: "Post unliked successfully",
       isSuccess: true,
     });
@@ -198,10 +224,9 @@ export const deletePost = async (req, res) => {
 export const getSinglePost = async (req, res) => {
   const { postId } = req.params;
   try {
-    const post = await Post.findById(postId).populate(
-      "userId",
-      "username name _id profilePicture"
-    );
+    const post = await Post.findById(postId)
+      .populate("userId", "username name _id profilePicture")
+      .lean();
     if (post) {
       return res.status(200).json({
         message: "post fetched successfully",

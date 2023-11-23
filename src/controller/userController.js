@@ -4,50 +4,44 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import QueryString from "qs";
 import { deleteImage, uploadImage } from "../utils/uploadImage.js";
+import { ApiError } from "../utils/ApiError.js";
+import asyncHandler from "../utils/asyncHandler.js";
 
 // register a new user to connectify
-export const registerUser = async (req, res) => {
-  const { username, password } = req.body;
-  try {
-    const existingUser = await User.findOne({ username });
-    if (existingUser) {
-      return res.status(409).json({
-        error: "User exists",
-        message: `User with ${username} already exists`,
-        isSuccess: false,
-      });
-    }
-
-    const salt = bcrypt.genSaltSync(10);
-    const hash = bcrypt.hashSync(password, salt);
-    const user = new User({ ...req.body, password: hash });
-
-    const newUser = await user.save();
-    const token = jwt.sign(
-      { userId: newUser._id, username: newUser.username },
-      "ujjwal",
-      {
-        expiresIn: "1d",
-      }
-    );
-    const userResponse = {
-      _id: newUser._id,
-      username: newUser.username,
-      email: newUser.email,
-      name: newUser.name,
-    };
-    return res
-      .status(201)
-      .json({ isSuccess: true, token: token, user: userResponse });
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      error: "Internal server Error",
-      message: error.message || "Something went wrong",
-      isSuccess: false,
-    });
+export const registerUser = asyncHandler(async (req, res) => {
+  const { username, password, email } = req.body;
+  if (
+    [username, password, email].some((feild) => !feild || feild.trim() === "")
+  ) {
+    throw new ApiError(400, "All feilds are required");
   }
-};
+  const existingUser = await User.findOne({ username });
+  if (existingUser) {
+    throw new ApiError(409, `User with ${username} already exists`);
+  }
+
+  const salt = bcrypt.genSaltSync(10);
+  const hash = bcrypt.hashSync(password, salt);
+  const user = new User({ ...req.body, password: hash });
+
+  const newUser = await user.save();
+  const token = jwt.sign(
+    { userId: newUser._id, username: newUser.username },
+    "ujjwal",
+    {
+      expiresIn: "1d",
+    }
+  );
+  const userResponse = {
+    _id: newUser._id,
+    username: newUser.username,
+    email: newUser.email,
+    name: newUser.name,
+  };
+  return res
+    .status(201)
+    .json({ isSuccess: true, token: token, user: userResponse });
+});
 
 // login to connectify
 export const loginUser = async (req, res) => {
@@ -122,13 +116,27 @@ export const getUser = async (req, res) => {
 };
 
 export const getUserByUsername = async (req, res) => {
+  const { userId } = req.user;
   const { username } = req.params;
   try {
     if (username !== null && username !== "") {
       const user = await User.findOne({ username: username })
-        .select("-password -__v")
-        .populate("posts");
-      return res.status(200).json({ user: user, isSuccess: true });
+        .select("-password -__v -email")
+        .lean();
+      const isFollowed = user.followers.find(
+        (u) => u.toString() === userId.toString()
+      );
+
+      return res.status(200).json({
+        user: {
+          ...user,
+          followers: user.followers.length,
+          following: user.following.length,
+          posts: user.posts.length,
+          isFollowed: !!isFollowed,
+        },
+        isSuccess: true,
+      });
     } else {
       return res.status(500).json({
         error: "userId is empty",
@@ -148,6 +156,28 @@ export const getUserByUsername = async (req, res) => {
 // get all users wanted to add pagination to the this endpoint
 export const getUsers = async (req, res) => {
   const { userId } = req.user;
+  try {
+    const currentUser = await User.findOne({ _id: userId });
+    const followingList = currentUser.following;
+    const users = await User.find({
+      _id: { $ne: userId, $nin: followingList },
+    }).select("_id username name profilePicture");
+
+    return res.status(200).json({
+      users: users,
+      isSuccess: true,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: "Internal server Error",
+      message: "Something went wrong",
+      isSuccess: false,
+    });
+  }
+};
+
+export const getFriends = async (req, res) => {
+  const { userId } = req.user;
   const { page = 1, pageSize = 10 } = req.query;
   try {
     const skip = (page - 1) * pageSize;
@@ -155,15 +185,22 @@ export const getUsers = async (req, res) => {
     const currentUser = await User.findOne({ _id: userId });
 
     const followingList = currentUser.following;
+    const followersList = currentUser.followers;
+
+    // Merge followers and following list to get all connected users
+    const connectedUsers = [...followingList, ...followersList, userId];
 
     const users = await User.find({
-      _id: { $ne: userId, $nin: followingList },
+      _id: { $ne: userId, $in: connectedUsers },
     })
       .skip(skip)
       .limit(Number(pageSize))
       .select("-password -__v");
 
-    const totalRecords = await User.countDocuments({ _id: { $ne: userId } });
+    const totalRecords = await User.countDocuments({
+      _id: { $ne: userId, $in: connectedUsers },
+    });
+
     return res.status(200).json({
       users: users,
       isSuccess: true,
@@ -199,20 +236,16 @@ export const sendFriendRequest = async (req, res) => {
     }
 
     if (targetUser.isPrivate) {
-      // Check if the friend request has already been sent
       if (currentuser.sentfriendRequest.includes(friendId)) {
         return res.status(400).json({
           isSuccess: false,
           message: "Friend request already sent",
         });
       }
-      // Add the target user's ID to the current user's friendRequestsSent array
       currentuser.sentfriendRequest.push(friendId);
       await currentuser.save();
 
       return res.status(200).json({
-        user: currentuser,
-        targetUser: targetUser,
         isSuccess: true,
         message: "Friend request sent successfully",
       });
@@ -472,3 +505,26 @@ export const googleAuthenticate = async (req, res) => {
     return res.status(404).json({ message: "something went wrong" });
   }
 };
+
+export const unfollowUser = asyncHandler(async (req, res) => {
+  const { friendId } = req.params;
+  const { userId } = req.user;
+
+  //check if friendId is present in current users following list
+  const currentuser = await User.findById(userId);
+  const targetUser = await User.findById(friendId);
+
+  if (
+    currentuser.following.includes(friendId) &&
+    targetUser.followers.includes(userId)
+  ) {
+    console.log("entererd");
+    currentuser.following.pop(friendId);
+    currentuser.following.pop(friendId);
+    await currentuser.save();
+
+    targetUser.followers.pop(userId);
+    await targetUser.save();
+    return res.status(200).json({ isSuccess: true });
+  }
+});

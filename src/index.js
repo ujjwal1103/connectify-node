@@ -11,6 +11,8 @@ import {
   storyRouter,
   userRouter,
 } from "./routes/index.js";
+import { ApiError } from "./utils/ApiError.js";
+import asyncHandler from "./utils/asyncHandler.js";
 dotenv.config();
 
 const app = express();
@@ -27,9 +29,12 @@ app.use("/api", notificationRouter);
 app.use("/api", commentRouter);
 app.use("/api", chatRouter);
 app.use("/api", messageRouter);
-app.all("/api/*", (req, res) => {
-  return res.status(404).json({ error: "Resource not found", isSuccess: false, pathname: req.pathname });
-});
+app.all(
+  "/api/*",
+  asyncHandler((req, res) => {
+    throw new ApiError(404, "Resource not found");
+  })
+);
 
 mongoose
   .connect(process.env.MONGO_DB_URL)

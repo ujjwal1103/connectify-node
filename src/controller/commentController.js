@@ -4,13 +4,16 @@ import { formatDateDifference } from "../utils/index.js";
 export const getComments = async (req, res) => {
   const { post } = req.params;
   try {
-    const comments = await Comment.find({post}).sort({
-      updatedAt: -1,
-    }).populate('from', 'username profilePicture');
+    const comments = await Comment.find({ post })
+      .sort({
+        updatedAt: -1,
+      })
+      .populate("from", "username profilePicture")
+      .lean();
 
-    const formattedComments = comments.map(comment => {
+    const formattedComments = comments.map((comment) => {
       return {
-        ...comment.toObject(),
+        ...comment,
         createdAt: formatDateDifference(comment.createdAt),
         updatedAt: formatDateDifference(comment.updatedAt),
       };
@@ -38,10 +41,18 @@ export const addComment = async (req, res) => {
       comment,
       post,
     });
-    await newComment.save();
+    const createdComment = await newComment.save();
+
+    const c = await Comment.findOne(createdComment._id)
+      .populate("from", "username profilePicture")
+      .lean();
 
     return res.status(201).json({
-      comment: newComment,
+      comment: {
+        ...c,
+        createdAt: formatDateDifference(c.createdAt),
+        updatedAt: formatDateDifference(c.updatedAt),
+      },
       isSuccess: true,
     });
   } catch (err) {
@@ -51,4 +62,3 @@ export const addComment = async (req, res) => {
     });
   }
 };
-

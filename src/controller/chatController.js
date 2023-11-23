@@ -5,7 +5,7 @@ import User from "../models/userModal.js";
 
 export const createChat = async (req, res) => {
   const { userId } = req.user;
-  console.log(userId);
+
   const { to } = req.body;
 
   const members = [userId, to];
@@ -54,9 +54,21 @@ export const createChat = async (req, res) => {
     // Save the new chat to the database
     const savedChat = await newChat.save();
 
+    const chat = await Chat.findById(savedChat._id)
+      .populate({
+        path: "members lastMessage",
+        select: "name username _id profilePicture text from",
+      })
+      .lean();
+
+    const friend = chat.members.find(
+      (member) => member._id.toString() !== userId
+    );
+
+    chat.delete("members");
     return res.status(201).json({
       isSuccess: true,
-      chat: savedChat,
+      chat: { ...chat, friend: friend },
     });
   } catch (error) {
     return res.status(500).json({
@@ -69,21 +81,23 @@ export const createChat = async (req, res) => {
 export const getAllChats = async (req, res) => {
   const { userId } = req.user;
   try {
-    const chats = await Chat.find({ members: { $in: [userId] } }).populate({
-      path: "members lastMessage",
-      select: "name username _id profilePicture text from",
-    }).sort({ updatedAt: -1 });
-    
-    console.log(chats)
+    const chats = await Chat.find({ members: { $in: [userId] } })
+      .populate({
+        path: "members lastMessage",
+        select: "name username _id profilePicture text from",
+      })
+      .select("-__v")
+      .sort({ updatedAt: -1 })
+      .lean();
+
     const modifiedChats = chats.map((chat) => {
       // Find the friend who is not the current user
-      const friend = chat.members.find(
-        (member) => member._id.toString() !== userId
-      );
+      const { members, ...other } = chat;
+      const friend = members.find((member) => member._id.toString() !== userId);
 
       // Create a new chat object with the additional "friend" field
       const modifiedChat = {
-        ...chat.toObject(), // Convert the Mongoose document to a plain JavaScript object
+        ...other, // Convert the Mongoose document to a plain JavaScript object
         friend: friend,
       };
 

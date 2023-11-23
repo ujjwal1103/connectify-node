@@ -13,22 +13,25 @@ import {
   getFollowing,
   googleAuthentication,
   googleAuthenticate,
+  getFriends,
+  unfollowUser,
 } from "../controller/userController.js";
 import {
   upload,
-  validateUsernamePassword,
   verifyToken,
 } from "../middleware/index.js";
 const router = express.Router();
 
 // register router
 
-router.post("/register", validateUsernamePassword, registerUser);
-router.post("/login", validateUsernamePassword, loginUser);
+router.post("/register", registerUser);
+router.post("/login", loginUser);
 router.get("/user", verifyToken, getUser);
 router.get("/user/:username", verifyToken, getUserByUsername);
 router.get("/users", verifyToken, getUsers);
+router.get("/friends", verifyToken, getFriends);
 router.put("/sendFriendReq", verifyToken, sendFriendRequest);
+router.put("/unfollow/:friendId", verifyToken, unfollowUser);
 router.delete("/user", verifyToken, deleteUser);
 router.put("/user/edit", verifyToken, upload.single("image"), editUser);
 router.get("/users/search", verifyToken, searchUsers);
