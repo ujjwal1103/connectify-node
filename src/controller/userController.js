@@ -22,136 +22,93 @@ export const registerUser = asyncHandler(async (req, res) => {
 
   const salt = bcrypt.genSaltSync(10);
   const hash = bcrypt.hashSync(password, salt);
-  const user = new User({ ...req.body, password: hash });
 
-  const newUser = await user.save();
-  const token = jwt.sign(
-    { userId: newUser._id, username: newUser.username },
-    "ujjwal",
-    {
-      expiresIn: "1d",
-    }
-  );
-  const userResponse = {
-    _id: newUser._id,
-    username: newUser.username,
-    email: newUser.email,
-    name: newUser.name,
-  };
-  return res
-    .status(201)
-    .json({ isSuccess: true, token: token, user: userResponse });
+  const user = await User.create({
+    email,
+    password: hash,
+    username: username.toLowerCase(),
+  });
+
+  return res.status(201).json({
+    isSuccess: true,
+    message: `Welcome To connectify : ${user.username}`,
+  });
 });
 
 // login to connectify
-export const loginUser = async (req, res) => {
+export const loginUser = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
-  try {
-    const user = await User.findOne({ username });
-    if (user) {
-      const matchPassword = await bcrypt.compare(password, user.password);
-      if (matchPassword) {
-        const token = jwt.sign(
-          { userId: user._id, username: user.username },
-          "ujjwal",
-          {
-            expiresIn: "1d",
-          }
-        );
-
-        const userResponse = {
-          _id: user._id,
-          username: user.username,
-          email: user.email,
-          name: user.name,
-        };
-
-        return res
-          .status(201)
-          .json({ user: userResponse, isSuccess: true, token: token });
-      } else {
-        return res.status(400).json({
-          error: "Incorrect creadantials",
-          message: `Incorrect username and password`,
-          isSuccess: false,
-        });
-      }
-    } else {
-      return res.status(400).json({
-        error: "User not found",
-        message: `user with ${username} not found`,
-        isSuccess: false,
-      });
-    }
-  } catch (error) {
-    return res.status(500).json({
-      error: "Internal server Error",
-      message: error || "Something went wrong",
-      isSuccess: false,
-    });
+  const user = await User.findOne({ username })
+    .select("username email name password")
+    .lean();
+  if (!user) {
+    throw new ApiError(400, `user with ${username} not found`);
   }
-};
+  const matchPassword = await bcrypt.compare(password, user.password);
+  if (!matchPassword) {
+    throw new ApiError(400, "Incorrect username name and password");
+  }
+  const token = jwt.sign(
+    { userId: user._id, username: user.username },
+    process.env.JWT_SECREATE,
+    { expiresIn: process.env.JWT_EXPIRE }
+  );
+  delete user.password;
+
+  console.log(user);
+  return res
+    .status(201)
+    .json({ user: { ...user }, isSuccess: true, token: token });
+});
 
 //get info of logged in user
-export const getUser = async (req, res) => {
+export const getUser = asyncHandler(async (req, res) => {
   const { userId } = req.user;
-  try {
-    if (userId !== null && userId !== "") {
-      const user = await User.findOne({ _id: userId }).select("-password -__v");
-      return res.status(200).json({ user: user, isSuccess: true });
-    } else {
-      return res.status(500).json({
-        error: "userId is empty",
-        message: "userId is empty",
-        isSuccess: false,
-      });
-    }
-  } catch (error) {
-    return res.status(500).json({
-      error: "Internal server Error",
-      message: error || "Something went wrong",
-      isSuccess: false,
-    });
+  if (!userId) {
+    throw new ApiError(400, "UnAuthorized UserId not found");
   }
-};
+  const user = await User.findOne({ _id: userId })
+    .select("-password -__v -email")
+    .lean();
 
-export const getUserByUsername = async (req, res) => {
+  return res.status(200).json({
+    user: {
+      ...user,
+      followers: user.followers.length,
+      following: user.following.length,
+      posts: user.posts.length,
+    },
+    isSuccess: true,
+  });
+});
+
+export const getUserByUsername = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const { username } = req.params;
-  try {
-    if (username !== null && username !== "") {
-      const user = await User.findOne({ username: username })
-        .select("-password -__v -email")
-        .lean();
-      const isFollowed = user.followers.find(
-        (u) => u.toString() === userId.toString()
-      );
 
-      return res.status(200).json({
-        user: {
-          ...user,
-          followers: user.followers.length,
-          following: user.following.length,
-          posts: user.posts.length,
-          isFollowed: !!isFollowed,
-        },
-        isSuccess: true,
-      });
-    } else {
-      return res.status(500).json({
-        error: "userId is empty",
-        message: "userId is empty",
-        isSuccess: false,
-      });
-    }
-  } catch (error) {
-    return res.status(500).json({
-      error: "Internal server Error",
-      message: error || "Something went wrong",
-      isSuccess: false,
-    });
+  const user = await User.findOne({ username: username })
+    .select("-password -__v -email")
+    .lean();
+
+  if (!user) {
+    throw new ApiError(400, `user with ${username} not found`);
   }
-};
+
+  const isFollowed = user.followers.find(
+    (u) => u.toString() === userId.toString()
+  );
+
+  return res.status(200).json({
+    user: {
+      ...user,
+      followers: user.followers.length,
+      following: user.following.length,
+      posts: user.posts.length,
+      isFollowed: !!isFollowed,
+    },
+    isSuccess: true,
+  });
+});
 
 // get all users wanted to add pagination to the this endpoint
 export const getUsers = async (req, res) => {
@@ -318,16 +275,22 @@ export const editUser = async (req, res) => {
 
   try {
     const user = await User.findById(userId);
-    let url = "";
+
     if (user) {
-      if (req.file) {
-        url = await uploadImage(req.file.originalname, "profilePics");
-      } else {
-        deleteImage(user?.profilePicture);
-      }
+      // if (req.file) {
+      //   url = await uploadImage(req.file.originalname, "profilePics");
+      // } else {
+      //   deleteImage(user?.profilePicture);
+      // }
       const result = await User.findByIdAndUpdate(
         userId,
-        { username, bio, name, profilePicture: url, gender },
+        {
+          username,
+          bio,
+          name,
+          profilePicture: process.env.IMAGE_PATH + req.file.originalname,
+          gender,
+        },
         { new: true }
       );
       return res.status(200).json({

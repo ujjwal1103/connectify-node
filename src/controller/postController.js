@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import Post from "../models/post.js";
 import User from "../models/userModal.js";
 import { deleteImage, uploadImage } from "../utils/uploadImage.js";
@@ -11,11 +12,11 @@ export const createPost = async (req, res) => {
     : [];
 
   try {
-    const url = await uploadImage(req.file.originalname, "posts");
+    // const url = await uploadImage(req.file.originalname, "posts");
 
     const newPost = {
       caption,
-      imageUrl: url,
+      imageUrl: process.env.IMAGE_PATH + req.file.originalname,
       hashtags,
       userId: req.user.userId,
     };

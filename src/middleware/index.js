@@ -1,5 +1,7 @@
 import jwt from "jsonwebtoken";
 import multer from "multer";
+import asyncHandler from "./../utils/asyncHandler.js";
+import { ApiError } from "../utils/ApiError.js";
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -14,28 +16,23 @@ const storage = multer.diskStorage({
 
 export const upload = multer({ storage: storage });
 
-// Define a middleware function for token verification
-export function verifyToken(req, res, next) {
-  // Get the token from the request header, query parameter, or cookies
+export const verifyToken = asyncHandler((req, res, next) => {
   const token = req.header("Authorization");
-
-  // Check if a token is provided
   if (!token) {
-    return res.status(401).json({ message: "Unauthorized: No token provided" });
+    throw new ApiError(401, "Unauthorized: No token provided");
   }
+  const secretKey = process.env.JWT_SECREATE;
 
-  // Verify the token using your secret key
-  const secretKey = "ujjwal"; // Replace with your actual secret key
   jwt.verify(token, secretKey, (err, decoded) => {
     if (err) {
-      return res.status(401).json({ message: "Unauthorized: Invalid token" });
+      throw new ApiError(401, "Unauthorized: Invalid token");
     }
     req.user = decoded;
     next();
   });
-}
+});
 
-export function validateUsernamePassword(req, res, next) {
+export const validateUsernamePassword = (req, res, next) => {
   const { path } = req.route;
   const { username, password, email } = req.body;
 
@@ -54,11 +51,11 @@ export function validateUsernamePassword(req, res, next) {
     return res.status(401).json({ message: getVariableName(req.body) });
   }
   next();
-}
+};
 
 //middleware to check the current logged in user is admin or not
 
-export function isAdmin(req, rea, next) {
+export const isAdmin = (req, rea, next) => {
   const token = req.header("Authorization");
 
   if (!token) {
@@ -66,4 +63,18 @@ export function isAdmin(req, rea, next) {
   }
 
   const secretKey = "ujjwal";
-}
+};
+
+export const validateUsername = asyncHandler((req, res, next) => {
+  const usernamePattern = /^(?!^[0-9])(?!.*[^a-z0-9_]).+$/;
+  const username = req.params.username;
+  if (!username) {
+    throw new ApiError(400, "username is required");
+  }
+
+  if (!username.match(usernamePattern)) {
+    throw new ApiError(400, "Invalid username");
+  }
+
+  next();
+});

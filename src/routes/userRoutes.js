@@ -16,10 +16,7 @@ import {
   getFriends,
   unfollowUser,
 } from "../controller/userController.js";
-import {
-  upload,
-  verifyToken,
-} from "../middleware/index.js";
+import { upload, validateUsername, verifyToken } from "../middleware/index.js";
 const router = express.Router();
 
 // register router
@@ -27,7 +24,7 @@ const router = express.Router();
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.get("/user", verifyToken, getUser);
-router.get("/user/:username", verifyToken, getUserByUsername);
+router.get("/user/:username", verifyToken, validateUsername, getUserByUsername);
 router.get("/users", verifyToken, getUsers);
 router.get("/friends", verifyToken, getFriends);
 router.put("/sendFriendReq", verifyToken, sendFriendRequest);

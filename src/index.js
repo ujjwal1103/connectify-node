@@ -2,6 +2,7 @@ import express from "express";
 import mongoose from "mongoose";
 import dotenv from "dotenv";
 import cors from "cors";
+
 import {
   chatRouter,
   commentRouter,
@@ -13,6 +14,7 @@ import {
 } from "./routes/index.js";
 import { ApiError } from "./utils/ApiError.js";
 import asyncHandler from "./utils/asyncHandler.js";
+import { verifyToken } from "./middleware/index.js";
 dotenv.config();
 
 const app = express();
@@ -21,6 +23,7 @@ app.use(express.json());
 
 app.use(cors());
 app.set("Connection", "keep-alive");
+app.use(express.static("public"));
 
 app.use("/api", userRouter);
 app.use("/api", postRouter);
@@ -29,6 +32,14 @@ app.use("/api", notificationRouter);
 app.use("/api", commentRouter);
 app.use("/api", chatRouter);
 app.use("/api", messageRouter);
+app.get(
+  "/api/validetoken",
+  verifyToken,
+  asyncHandler((req, res) => {
+    return res.status(200).json({ isValid: true });
+  })
+);
+
 app.all(
   "/api/*",
   asyncHandler((req, res) => {
