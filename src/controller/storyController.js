@@ -1,6 +1,6 @@
-import Story, { UserStories } from "../models/story.js";
-import asyncHandler from "../utils/asyncHandler.js";
-// import { uploadImage } from "../utils/uploadImage.js";
+import Story, { UserStories } from "../models/story.modal.js";
+import asyncHandler from "./../utils/asyncHandler.js";
+import { ApiError } from "./../utils/ApiError.js";
 
 export const createStory = asyncHandler(async (req, res) => {
   const { userId } = req.user;

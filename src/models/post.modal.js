@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 
 const postSchema = new mongoose.Schema(
   {
@@ -20,23 +21,15 @@ const postSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    likeCount: {
-      type: Number,
-      default: 0,
-    },
     likedBy: {
       type: [mongoose.Schema.Types.ObjectId],
       ref: "User",
     },
-    comments: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Comment",
-      },
-    ],
   },
   { timestamps: true }
 );
+
+postSchema.plugin(mongooseAggregatePaginate);
 
 const Post = mongoose.model("Post", postSchema);
 

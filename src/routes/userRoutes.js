@@ -15,11 +15,12 @@ import {
   googleAuthenticate,
   getFriends,
   unfollowUser,
+  makeAccountPrivate,
 } from "../controller/userController.js";
 import { upload, validateUsername, verifyToken } from "../middleware/index.js";
 const router = express.Router();
 
-// register router
+// G{}ye
 
 router.post("/register", registerUser);
 router.post("/login", loginUser);
@@ -29,6 +30,7 @@ router.get("/users", verifyToken, getUsers);
 router.get("/friends", verifyToken, getFriends);
 router.put("/sendFriendReq", verifyToken, sendFriendRequest);
 router.put("/unfollow/:friendId", verifyToken, unfollowUser);
+router.put("/user/privateAccount", verifyToken, makeAccountPrivate);
 router.delete("/user", verifyToken, deleteUser);
 router.put("/user/edit", verifyToken, upload.single("image"), editUser);
 router.get("/users/search", verifyToken, searchUsers);

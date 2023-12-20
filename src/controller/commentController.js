@@ -1,4 +1,4 @@
-import Comment from "../models/comment.js";
+import Comment from "../models/comment.modal.js";
 import { formatDateDifference } from "../utils/index.js";
 
 export const getComments = async (req, res) => {

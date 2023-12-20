@@ -1,11 +1,11 @@
 import axios from "axios";
-import User from "../models/userModal.js";
+import User from "../models/user.modal.js";
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import QueryString from "qs";
+import asyncHandler from "./../utils/asyncHandler.js";
+import { ApiError } from "./../utils/ApiError.js";
 import { deleteImage, uploadImage } from "../utils/uploadImage.js";
-import { ApiError } from "../utils/ApiError.js";
-import asyncHandler from "../utils/asyncHandler.js";
 
 // register a new user to connectify
 export const registerUser = asyncHandler(async (req, res) => {
@@ -68,7 +68,7 @@ export const getUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, "UnAuthorized UserId not found");
   }
   const user = await User.findOne({ _id: userId })
-    .select("-password -__v -email")
+    .select("-password -__v -email -sentfriendRequest -receivedfriendRequest")
     .lean();
 
   return res.status(200).json({
@@ -272,23 +272,21 @@ export const deleteUser = async (req, res) => {
 export const editUser = async (req, res) => {
   const { userId } = req.user;
   const { username, bio, name, gender } = req.body;
-
   try {
     const user = await User.findById(userId);
-
+    let url;
     if (user) {
-      // if (req.file) {
-      //   url = await uploadImage(req.file.originalname, "profilePics");
-      // } else {
-      //   deleteImage(user?.profilePicture);
-      // }
+      if (req.file) {
+        url = await uploadImage(req.file.originalname, "profilePics");
+      }
       const result = await User.findByIdAndUpdate(
         userId,
         {
           username,
           bio,
           name,
-          profilePicture: process.env.IMAGE_PATH + req.file.originalname,
+          // profilePicture:process.env.IMAGE_PATH + req.file.originalname,
+          profilePicture: url,
           gender,
         },
         { new: true }
@@ -490,4 +488,14 @@ export const unfollowUser = asyncHandler(async (req, res) => {
     await targetUser.save();
     return res.status(200).json({ isSuccess: true });
   }
+});
+
+export const makeAccountPrivate = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
+  const updatedUser = await User.findByIdAndUpdate(
+    userId,
+    { isPrivate: true },
+    { new: true }
+  );
+  return res.status(200).json({ isSuccess: !!updatedUser });
 });

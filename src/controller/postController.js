@@ -1,51 +1,52 @@
-import mongoose from "mongoose";
-import Post from "../models/post.js";
-import User from "../models/userModal.js";
+import Post from "../models/post.modal.js";
+import User from "../models/user.modal.js";
+import { ApiError } from "../utils/ApiError.js";
 import { deleteImage, uploadImage } from "../utils/uploadImage.js";
+import asyncHandler from "./../utils/asyncHandler.js";
 
-export const createPost = async (req, res) => {
-  let { caption, hashtags = [] } = req.body;
+export const createPost = asyncHandler(async (req, res) => {
+  let { caption } = req.body;
 
-  let hashtagMatches = caption.match(/#(\w+)/g);
-  hashtags = hashtagMatches
-    ? hashtagMatches.map((match) => match.replace("#", ""))
-    : [];
+  let hashtagMatches;
+  let hashtags;
 
-  try {
-    // const url = await uploadImage(req.file.originalname, "posts");
-
-    const newPost = {
-      caption,
-      imageUrl: process.env.IMAGE_PATH + req.file.originalname,
-      hashtags,
-      userId: req.user.userId,
-    };
-    let post = new Post(newPost);
-    post = await post.save();
-
-    const user = await User.findById(req.user.userId);
-    user.posts.push(post._id);
-    await user.save();
-
-    return res.status(200).json({
-      post: post,
-      message: "post created successfully",
-      isSuccess: true,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      error: error,
-      message: error.message || "Internal server error",
-      isSuccess: false,
-    });
+  if (caption) {
+    hashtagMatches = caption?.match(/#(\w+)/g);
+    hashtags = hashtagMatches
+      ? hashtagMatches.map((match) => match.replace("#", ""))
+      : [];
   }
-};
+
+  if (!req.file) {
+    throw new ApiError(404, "Image is required");
+  }
+
+  const imageUrl = await uploadImage(req.file.originalname, "posts");
+  const newPost = {
+    caption,
+    imageUrl,
+    hashtags,
+    userId: req.user.userId,
+  };
+  let post = new Post(newPost);
+  post = await post.save();
+
+  const user = await User.findById(req.user.userId);
+  user.posts.push(post._id);
+  await user.save();
+
+  return res.status(200).json({
+    post: post,
+    message: "post created successfully",
+    isSuccess: true,
+  });
+});
 
 // fetch all posts
 export const fetchAllPosts = async (req, res) => {
   const { userId } = req.user;
 
-  try {
+ try {
     let posts = await Post.find()
       .populate("userId", "username name _id profilePicture")
       .sort({ updatedAt: -1 })
@@ -72,7 +73,7 @@ export const fetchAllPosts = async (req, res) => {
     });
   }
 };
-// fetch all posts by user
+
 export const fetchAllPostsByUser = async (req, res) => {
   const { userId } = req.user;
 

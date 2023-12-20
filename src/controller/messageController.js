@@ -1,5 +1,5 @@
-import Chat from "../models/chat.js";
-import Message from "../models/message.js";
+import Chat from "../models/chat.modal.js";
+import Message from "../models/message.modal.js";
 
 export const sendMessage = async (req, res) => {
   const { userId: from } = req.user;

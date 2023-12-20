@@ -1,82 +1,64 @@
 // create a new chat
+import Chat from "../models/chat.modal.js";
+import User from "../models/user.modal.js";
+import asyncHandler from "./../utils/asyncHandler.js";
+import { ApiError } from "./../utils/ApiError.js";
 
-import Chat from "../models/chat.js";
-import User from "../models/userModal.js";
-
-export const createChat = async (req, res) => {
-  const { userId } = req.user;
-
-  const { to } = req.body;
-
+export const createChat = asyncHandler(async (req, res) => {
+  const {
+    user: { userId },
+    body: { to },
+  } = req;
   const members = [userId, to];
-  try {
-    const toUser = await User.findById(to);
-
-    if (!toUser) {
-      return res.status(404).json({
-        error: "The 'to' user does not exist.",
-        isSuccess: false,
-      });
-    }
-
-    if (to === userId) {
-      return res.status(400).json({
-        error:
-          "The 'to' array cannot contain the same user as the 'from' user.",
-        isSuccess: false,
-      });
-    }
-
-    const existingChat = await Chat.findOne({
-      members: {
-        $all: members,
-      },
-    });
-
-    if (existingChat) {
-      return res.status(400).json({
-        error: "Chat with these members already exists",
-        isSuccess: false,
-      });
-    }
-    const uniqueMembers = Array.from(new Set(members));
-
-    if (uniqueMembers.length < 2) {
-      return res.status(400).json({
-        error: "The chat must have at least two unique members.",
-        isSuccess: false,
-      });
-    }
-    const newChat = new Chat({
-      members: uniqueMembers,
-    });
-
-    // Save the new chat to the database
-    const savedChat = await newChat.save();
-
-    const chat = await Chat.findById(savedChat._id)
-      .populate({
-        path: "members lastMessage",
-        select: "name username _id profilePicture text from",
-      })
-      .lean();
-
-    const friend = chat.members.find(
-      (member) => member._id.toString() !== userId
-    );
-
-    chat.delete("members");
-    return res.status(201).json({
-      isSuccess: true,
-      chat: { ...chat, friend: friend },
-    });
-  } catch (error) {
-    return res.status(500).json({
-      error: error.message,
-      isSuccess: false,
-    });
+  const toUser = await User.findById(to);
+  if (!toUser) {
+    throw ApiError(400, `The ${to} user does not exist`);
   }
-};
+
+  if (to === userId) {
+    throw ApiError(
+      400,
+      "The 'to' array cannot contain the same user as the 'from' user."
+    );
+  }
+
+  const existingChat = await Chat.findOne({
+    members: {
+      $all: members,
+    },
+  });
+
+  if (existingChat) {
+    throw ApiError(200, "Chat with these members already exists");
+  }
+
+  //5497433 ticket
+  const uniqueMembers = Array.from(new Set(members));
+
+  if (uniqueMembers.length < 2) {
+    throw ApiError(400, "The chat must have at least two unique members.");
+  }
+  const newChat = new Chat({
+    members: uniqueMembers,
+  });
+
+  const savedChat = await newChat.save();
+
+  const chat = await Chat.findById(savedChat._id)
+    .populate({
+      path: "members lastMessage",
+      select: "name username _id profilePicture text from",
+    })
+    .lean();
+  const friend = chat.members.find(
+    (member) => member._id.toString() !== userId
+  );
+  chat.delete("members");
+  return res.status(201).json({
+    isSuccess: true,
+    chat: { ...chat, friend: friend },
+  });
+});
 
 export const getAllChats = async (req, res) => {
   const { userId } = req.user;

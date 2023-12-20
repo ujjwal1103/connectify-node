@@ -1,6 +1,6 @@
 import jwt from "jsonwebtoken";
 import multer from "multer";
-import asyncHandler from "./../utils/asyncHandler.js";
+import asyncHandler from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 
 const storage = multer.diskStorage({
@@ -38,7 +38,7 @@ export const validateUsernamePassword = (req, res, next) => {
 
   const getVariableName = (data) => {
     let keys = "";
-    for (var key in data) {
+    for (let key in data) {
       keys += key + ", ";
     }
     return keys + "are required";
