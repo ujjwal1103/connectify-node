@@ -64,17 +64,19 @@ export const loginUser = asyncHandler(async (req, res) => {
 //get info of logged in user
 export const getUser = asyncHandler(async (req, res) => {
   const { userId } = req.user;
-  if (!userId) {
-    throw new ApiError(400, "UnAuthorized UserId not found");
-  }
+  
   const user = await User.findOne({ _id: userId })
     .select("-password -__v -email -sentfriendRequest -receivedfriendRequest")
     .lean();
 
+  if(!user){
+    throw new ApiError(400, "UnAuthorized UserId not found");
+  }
+
   return res.status(200).json({
     user: {
       ...user,
-      followers: user.followers.length,
+      followers: user.followers?.length,
       following: user.following.length,
       posts: user.posts.length,
     },
@@ -343,53 +345,73 @@ export const searchUsers = async (req, res) => {
 
 // send list of all followers of requested user
 
-export const getFollowers = async (req, res) => {
+export const getFollowers = asyncHandler(async (req, res) => {
   const { userId } = req.params;
+  const { userId: currentUserId } = req.user;
+  const currentUser = await User.findOne({ _id: currentUserId })
+    .populate({
+      path: "followers",
+      select: "_id",
+    })
+    .lean();
 
-  try {
-    const user = await User.findOne({ _id: userId }).populate({
+  const user = await User.findOne({ _id: userId })
+    .populate({
       path: "followers",
       select: "_id username profilePicture",
-    });
-    if (user) {
-      return res.status(200).json({
-        users: user.followers,
-        isSuccess: true,
-      });
-    }
-  } catch (error) {
-    return res.status(500).json({
-      error: "Internal server Error",
-      message: "Something went wrong",
-      isSuccess: false,
+    })
+    .lean();
+
+  const followers = user.followers.map((e) => {
+    return {
+      ...e,
+      isFollow: currentUser.followers.some(
+        (u) => u._id.toString() === e._id.toString()
+      ),
+    };
+  });
+
+  if (user) {
+    return res.status(200).json({
+      users: followers,
+      isSuccess: true,
     });
   }
-};
+});
 
-// send list of all following of requested user
-
-export const getFollowing = async (req, res) => {
+export const getFollowing = asyncHandler(async (req, res) => {
   const { userId } = req.params;
+  const { userId: currentUserId } = req.user;
+  const currentUser = await User.findOne({ _id: currentUserId })
+    .populate({
+      path: "following",
+      select: "_id",
+    })
+    .lean();
 
-  try {
-    const user = await User.findOne({ _id: userId }).populate({
+  const user = await User.findOne({ _id: userId })
+    .populate({
       path: "following",
       select: "_id username profilePicture",
-    });
-    if (user) {
-      return res.status(200).json({
-        users: user.following,
-        isSuccess: true,
-      });
-    }
-  } catch (error) {
-    return res.status(500).json({
-      error: "Internal server Error",
-      message: "Something went wrong",
-      isSuccess: false,
+    })
+    .lean();
+
+  const followings = user.following.map((e) => {
+    return {
+      ...e,
+      isFollow: currentUser.following.some(
+        (u) => u._id.toString() === e._id.toString()
+      ),
+    };
+  });
+
+  if (user) {
+    return res.status(200).json({
+      users: followings,
+      isSuccess: true,
     });
   }
-};
+});
 
 const getGoogleAuthToken = async (code) => {
   const url = "https://oauth2.googleapis.com/token";

@@ -34,8 +34,8 @@ router.put("/user/privateAccount", verifyToken, makeAccountPrivate);
 router.delete("/user", verifyToken, deleteUser);
 router.put("/user/edit", verifyToken, upload.single("image"), editUser);
 router.get("/users/search", verifyToken, searchUsers);
-router.get("/user/followers/:userId", getFollowers);
-router.get("/user/following/:userId", getFollowing);
+router.get("/user/followers/:userId",verifyToken, getFollowers);
+router.get("/user/following/:userId", verifyToken,getFollowing);
 router.get("/oauth/google", googleAuthentication);
 router.get("/authenticate", googleAuthenticate);
 
