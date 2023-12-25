@@ -46,7 +46,7 @@ export const createPost = asyncHandler(async (req, res) => {
 export const fetchAllPosts = async (req, res) => {
   const { userId } = req.user;
 
- try {
+  try {
     let posts = await Post.find()
       .populate("userId", "username name _id profilePicture")
       .sort({ updatedAt: -1 })
@@ -242,6 +242,29 @@ export const getSinglePost = async (req, res) => {
         isSuccess: false,
       });
     }
+  } catch (error) {
+    return res.status(500).json({
+      error: error,
+      message: error.message || "Internal server error",
+      isSuccess: false,
+    });
+  }
+};
+
+/// admin controllers
+
+export const getAllPosts = async (req, res) => {
+  try {
+    let posts = await Post.find()
+      .populate("userId", "username name _id profilePicture ")
+      .sort({ updatedAt: -1 })
+      .lean();
+
+    return res.status(200).json({
+      posts: posts,
+      message: "posts fetched successfully",
+      isSuccess: true,
+    });
   } catch (error) {
     return res.status(500).json({
       error: error,

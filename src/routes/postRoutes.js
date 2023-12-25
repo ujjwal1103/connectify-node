@@ -10,6 +10,7 @@ import {
   unlikePost,
   fetchAllPostsByUserId,
   getSinglePost,
+  getAllPosts,
 } from "../controller/postController.js";
 
 router.post("/post", verifyToken, upload.single("imageUrl"), createPost);
@@ -20,5 +21,10 @@ router.get("/users/:userId", verifyToken, fetchAllPostsByUserId);
 router.put("/like/:postId", verifyToken, likePosts);
 router.put("/dislike/:postId", verifyToken, unlikePost);
 router.delete("/post/:postId", verifyToken, deletePost);
+
+
+// admin routes
+router.get("/admin/posts", getAllPosts);
+
 
 export default router;

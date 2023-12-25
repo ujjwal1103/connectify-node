@@ -16,6 +16,10 @@ import {
   getFriends,
   unfollowUser,
   makeAccountPrivate,
+  createUsers,
+  createNewUser,
+  getAllUsers,
+  editNewUser,
 } from "../controller/userController.js";
 import { upload, validateUsername, verifyToken } from "../middleware/index.js";
 const router = express.Router();
@@ -34,9 +38,15 @@ router.put("/user/privateAccount", verifyToken, makeAccountPrivate);
 router.delete("/user", verifyToken, deleteUser);
 router.put("/user/edit", verifyToken, upload.single("image"), editUser);
 router.get("/users/search", verifyToken, searchUsers);
-router.get("/user/followers/:userId",verifyToken, getFollowers);
-router.get("/user/following/:userId", verifyToken,getFollowing);
+router.get("/user/followers/:userId", verifyToken, getFollowers);
+router.get("/user/following/:userId", verifyToken, getFollowing);
 router.get("/oauth/google", googleAuthentication);
 router.get("/authenticate", googleAuthenticate);
+router.get("/createUsers", createUsers);
+
+// admin routes
+router.get("/admin/users", getAllUsers);
+router.post("/admin/users", createNewUser);
+router.put("/admin/editUser/:userId", editNewUser);
 
 export default router;
