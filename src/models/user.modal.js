@@ -48,24 +48,10 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
-    followers: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
-    following: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
-    posts: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Post",
-      },
-    ],
+    isBlocked: {
+      type: Boolean,
+      default: false,
+    },
     sentfriendRequest: [
       {
         type: mongoose.Schema.Types.ObjectId,

@@ -11,10 +11,12 @@ import {
   postRouter,
   storyRouter,
   userRouter,
+  followRouter,
 } from "./routes/index.js";
 import { ApiError } from "./utils/ApiError.js";
 import asyncHandler from "./utils/asyncHandler.js";
 import { verifyToken } from "./middleware/index.js";
+
 dotenv.config({
   path: "./.env",
 });
@@ -35,6 +37,7 @@ app.use("/api", notificationRouter);
 app.use("/api", commentRouter);
 app.use("/api", chatRouter);
 app.use("/api", messageRouter);
+app.use("/api", followRouter);
 
 app.get(
   "/api/validetoken",

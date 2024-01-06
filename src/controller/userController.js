@@ -9,6 +9,8 @@ import { deleteImage, uploadImage } from "../utils/uploadImage.js";
 import mongoose from "mongoose";
 import { getSingleUser } from "../aggregations/user.js";
 import { users } from "../userdata.js";
+import Post from "../models/post.modal.js";
+import { Follow } from "../models/follow.model.js";
 
 // register a new user to connectify
 export const registerUser = asyncHandler(async (req, res) => {
@@ -67,60 +69,94 @@ export const loginUser = asyncHandler(async (req, res) => {
 export const getUser = asyncHandler(async (req, res) => {
   const { userId } = req.user;
 
-  const userAggregate = getSingleUser(userId);
+  console.log(userId);
 
-  const user = await User.aggregate(userAggregate);
+  const user = await User.findOne({ _id: userId }).lean();
 
-  if (!user[0]) {
+  if (!user) {
     throw new ApiError(400, "UnAuthorized UserId not found");
   }
 
+  const following = await Follow.aggregate([
+    {
+      $match: {
+        followerId: new mongoose.Types.ObjectId(userId),
+      },
+    },
+    {
+      $count: "following",
+    },
+  ]);
+
+  const followers = await Follow.aggregate([
+    {
+      $match: {
+        followeeId: new mongoose.Types.ObjectId(userId),
+      },
+    },
+    {
+      $count: "followers",
+    },
+  ]);
+
   return res.status(200).json({
-    user: user[0],
+    user: {
+      ...user,
+      followers: followers[0]?.followers || 0,
+      following: following[0]?.following || 0,
+      posts: user.posts.length,
+    },
     isSuccess: true,
   });
 });
 
 export const getUserByUsername = asyncHandler(async (req, res) => {
-  const { userId } = req.user;
   const { username } = req.params;
+  const { userId } = req.user;
 
-  const user = await User.aggregate([
+  const user = await User.findOne({ username })
+    .select("-password -receivedfriendRequest -sentfriendRequest")
+    .lean();
+
+  if (!user) {
+    throw new ApiError(400, "UnAuthorized UserId not found");
+  }
+
+  const following = await Follow.aggregate([
     {
       $match: {
-        username: username,
+        followerId: new mongoose.Types.ObjectId(user?._id),
       },
     },
     {
-      $addFields: {
-        isFollow: {
-          $in: [new mongoose.Types.ObjectId(userId), "$followers"],
-        },
-        followers: {
-          $size: "$followers",
-        },
-        following: {
-          $size: "$following",
-        },
-        posts: {
-          $size: "$posts",
-        },
-      },
-    },
-    {
-      $project: {
-        password: 0,
-        receivedfriendRequest: 0,
-        __v: 0,
-        sentfriendRequest: 0,
-        createdAt: 0,
-        updatedAt: 0,
-      },
+      $count: "following",
     },
   ]);
 
+  const followers = await Follow.aggregate([
+    {
+      $match: {
+        followeeId: new mongoose.Types.ObjectId(user?._id),
+      },
+    },
+    {
+      $count: "followers",
+    },
+  ]);
+
+  const isFollow = await Follow.findOne({
+    followerId: userId,
+    followeeId: user?._id,
+  });
+
   return res.status(200).json({
-    user: user[0],
+    user: {
+      ...user,
+      followers: followers[0]?.followers || 0,
+      following: following[0]?.following || 0,
+      posts: user.posts.length,
+      isFollow: !!isFollow,
+    },
     isSuccess: true,
   });
 });
@@ -192,66 +228,6 @@ export const getFriends = async (req, res) => {
   }
 };
 
-export const sendFriendRequest = async (req, res) => {
-  const { userId } = req.user;
-  try {
-    const { friendId: towhomeFollow } = req.body; // Assuming you send the target user's ID in the request body
-
-    // Check if the user exists
-    const currentuser = await User.findById(userId);
-    const targetUser = await User.findById(towhomeFollow);
-
-    if (!targetUser || !currentuser) {
-      return res.status(404).json({
-        isSuccess: false,
-        message: "User not found",
-      });
-    }
-
-    if (targetUser.isPrivate) {
-      if (currentuser.sentfriendRequest.includes(towhomeFollow)) {
-        return res.status(400).json({
-          isSuccess: false,
-          message: "Friend request already sent",
-        });
-      }
-      currentuser.sentfriendRequest.push(towhomeFollow);
-      await currentuser.save();
-
-      return res.status(200).json({
-        isSuccess: true,
-        message: "Friend request sent successfully",
-      });
-    }
-
-    if (currentuser.following.includes(towhomeFollow)) {
-      return res.status(400).json({
-        isSuccess: false,
-        message: "already follows user",
-      });
-    }
-    currentuser.following.push(towhomeFollow);
-    await currentuser.save();
-
-    targetUser.followers.push(currentuser._id);
-    await targetUser.save();
-
-    return res.status(200).json({
-      user: currentuser,
-      targetUser: targetUser,
-      isSuccess: true,
-      message: "followed user successfully",
-    });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({
-      isSuccess: false,
-      error: "Internal server error",
-      message: "Something went wrong",
-    });
-  }
-};
-
 // delete an existing user from the database
 
 export const deleteUser = async (req, res) => {
@@ -282,8 +258,6 @@ export const deleteUser = async (req, res) => {
     });
   }
 };
-
-// edit user by userId
 
 export const editUser = async (req, res) => {
   const { userId } = req.user;
@@ -359,152 +333,152 @@ export const searchUsers = async (req, res) => {
 
 // send list of all followers of requested user
 
-export const getFollowers = asyncHandler(async (req, res) => {
-  const { userId } = req.params;
-  const { userId: currentUserId } = req.user;
+// export const getFollowers = asyncHandler(async (req, res) => {
+//   const { userId } = req.params;
+//   const { userId: currentUserId } = req.user;
 
-  console.log(userId, currentUserId);
+//   console.log(userId, currentUserId);
 
-  const isSameUser = currentUserId === userId;
+//   const isSameUser = currentUserId === userId;
 
-  const users = await User.aggregate([
-    {
-      $match: { _id: new mongoose.Types.ObjectId(userId) }, // Match the specific user
-    },
-    {
-      $project: {
-        followers: 1,
-        _id: 0,
-      },
-    },
-    {
-      $unwind: {
-        path: "$followers",
-      },
-    },
-    {
-      $lookup: {
-        from: "users",
-        localField: "followers",
-        foreignField: "_id",
-        as: "follower",
-      },
-    },
-    {
-      $addFields: {
-        _id: { $first: "$follower._id" },
-        username: { $first: "$follower.username" },
-        name: { $first: "$follower.name" },
-        profilePicture: { $first: "$follower.profilePicture" },
-        canRemove: {
-          $cond: {
-            if: isSameUser,
-            then: true,
-            else: false,
-          },
-        },
-        isFollow: {
-          $cond: {
-            if: isSameUser,
-            then: true,
-            else: {
-              $in: [
-                new mongoose.Types.ObjectId(currentUserId),
-                "$follower._id",
-              ],
-            },
-          },
-        },
-      },
-    },
-    {
-      $project: {
-        _id: 1,
-        username: 1,
-        profilePicture: 1,
-        isFollow: 1,
-        name: 1,
-        canRemove: 1,
-      },
-    },
-  ]);
+//   const users = await User.aggregate([
+//     {
+//       $match: { _id: new mongoose.Types.ObjectId(userId) }, // Match the specific user
+//     },
+//     {
+//       $project: {
+//         followers: 1,
+//         _id: 0,
+//       },
+//     },
+//     {
+//       $unwind: {
+//         path: "$followers",
+//       },
+//     },
+//     {
+//       $lookup: {
+//         from: "users",
+//         localField: "followers",
+//         foreignField: "_id",
+//         as: "follower",
+//       },
+//     },
+//     {
+//       $addFields: {
+//         _id: { $first: "$follower._id" },
+//         username: { $first: "$follower.username" },
+//         name: { $first: "$follower.name" },
+//         profilePicture: { $first: "$follower.profilePicture" },
+//         canRemove: {
+//           $cond: {
+//             if: isSameUser,
+//             then: true,
+//             else: false,
+//           },
+//         },
+//         isFollow: {
+//           $cond: {
+//             if: isSameUser,
+//             then: true,
+//             else: {
+//               $in: [
+//                 new mongoose.Types.ObjectId(currentUserId),
+//                 "$follower._id",
+//               ],
+//             },
+//           },
+//         },
+//       },
+//     },
+//     {
+//       $project: {
+//         _id: 1,
+//         username: 1,
+//         profilePicture: 1,
+//         isFollow: 1,
+//         name: 1,
+//         canRemove: 1,
+//       },
+//     },
+//   ]);
 
-  if (users.length) {
-    return res.status(200).json({
-      users: users,
-      isSuccess: true,
-    });
-  }
-});
+//   if (users.length) {
+//     return res.status(200).json({
+//       users: users,
+//       isSuccess: true,
+//     });
+//   }
+// });
 
-export const getFollowing = asyncHandler(async (req, res) => {
-  const { userId } = req.params;
-  const { userId: currentUserId } = req.user;
+// export const getFollowing = asyncHandler(async (req, res) => {
+//   const { userId } = req.params;
+//   const { userId: currentUserId } = req.user;
 
-  const isSameUser = currentUserId === userId;
+//   const isSameUser = currentUserId === userId;
 
-  const users = await User.aggregate([
-    {
-      $match: { _id: new mongoose.Types.ObjectId(userId) }, // Match the specific user
-    },
-    {
-      $project: {
-        following: 1,
-        _id: 0,
-      },
-    },
-    {
-      $unwind: {
-        path: "$following",
-      },
-    },
-    {
-      $lookup: {
-        from: "users",
-        localField: "following",
-        foreignField: "_id",
-        as: "following",
-      },
-    },
-    {
-      $addFields: {
-        _id: { $first: "$following._id" },
-        username: { $first: "$following.username" },
-        name: { $first: "$following.name" },
-        profilePicture: { $first: "$following.profilePicture" },
-        isFollow: {
-          $cond: {
-            if: isSameUser,
-            then: true,
-            else: {
-              $in: [
-                new mongoose.Types.ObjectId(currentUserId),
-                "$following._id",
-              ],
-            },
-          },
-        },
-      },
-    },
-    {
-      $project: {
-        _id: 1,
-        username: 1,
-        profilePicture: 1,
-        isFollow: 1,
-        name: 1,
-      },
-    },
-  ]);
-  if (!users?.length) {
-    throw new ApiError(400, `users not found`);
-  }
+//   const users = await User.aggregate([
+//     {
+//       $match: { _id: new mongoose.Types.ObjectId(userId) }, // Match the specific user
+//     },
+//     {
+//       $project: {
+//         following: 1,
+//         _id: 0,
+//       },
+//     },
+//     {
+//       $unwind: {
+//         path: "$following",
+//       },
+//     },
+//     {
+//       $lookup: {
+//         from: "users",
+//         localField: "following",
+//         foreignField: "_id",
+//         as: "following",
+//       },
+//     },
+//     {
+//       $addFields: {
+//         _id: { $first: "$following._id" },
+//         username: { $first: "$following.username" },
+//         name: { $first: "$following.name" },
+//         profilePicture: { $first: "$following.profilePicture" },
+//         isFollow: {
+//           $cond: {
+//             if: isSameUser,
+//             then: true,
+//             else: {
+//               $in: [
+//                 new mongoose.Types.ObjectId(currentUserId),
+//                 "$following._id",
+//               ],
+//             },
+//           },
+//         },
+//       },
+//     },
+//     {
+//       $project: {
+//         _id: 1,
+//         username: 1,
+//         profilePicture: 1,
+//         isFollow: 1,
+//         name: 1,
+//       },
+//     },
+//   ]);
+//   if (!users?.length) {
+//     throw new ApiError(400, `users not found`);
+//   }
 
-  return res.status(200).json({
-    users: users,
-    isSuccess: true,
-  });
-});
+//   return res.status(200).json({
+//     users: users,
+//     isSuccess: true,
+//   });
+// });
 
 const getGoogleAuthToken = async (code) => {
   const url = "https://oauth2.googleapis.com/token";
@@ -582,29 +556,6 @@ export const googleAuthenticate = async (req, res) => {
   }
 };
 
-export const unfollowUser = asyncHandler(async (req, res) => {
-  const { friendId } = req.params;
-  const { userId } = req.user;
-
-  //check if friendId is present in current users following list
-  const currentuser = await User.findById(userId);
-  const targetUser = await User.findById(friendId);
-
-  if (
-    currentuser.following.includes(friendId) &&
-    targetUser.followers.includes(userId)
-  ) {
-    console.log("entererd");
-    currentuser.following.pop(friendId);
-    currentuser.following.pop(friendId);
-    await currentuser.save();
-
-    targetUser.followers.pop(userId);
-    await targetUser.save();
-    return res.status(200).json({ isSuccess: true });
-  }
-});
-
 export const makeAccountPrivate = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const updatedUser = await User.findByIdAndUpdate(
@@ -634,14 +585,23 @@ export const createUsers = asyncHandler(async (req, res) => {
 export const getAllUsers = asyncHandler(async (req, res) => {
   const page = req.query.page || 1; // Get the page parameter from the query string or default to page 1
   const size = 10; // Number of users per page
+  const usernameQuery = req.query.username;
 
-  const count = await User.countDocuments();
+  let query = {}; // Default empty query object
+
+  if (usernameQuery) {
+    // If username query parameter exists, create a query to search by username starting with the query string
+    query = { username: { $regex: `^${usernameQuery}`, $options: "i" } };
+  }
+  const count = await User.countDocuments(query);
   const totalPages = Math.ceil(count / size);
 
-  const users = await User.find()
+  const users = await User.find(query)
     .select("-password -__v")
+    .sort({ updatedAt: -1 })
     .skip((page - 1) * size)
-    .limit(size);
+    .limit(size)
+    .lean();
 
   return res.status(200).json({
     users: users,
@@ -667,7 +627,7 @@ export const editNewUser = asyncHandler(async (req, res) => {
         name: req?.body?.name,
         email: req?.body?.email,
         profilePicture: req?.body?.profilePicture,
-        mobileNumber: req.body?.mobileNumber,
+        mobile: req.body?.mobile,
         gender: req?.body?.gender,
         isPrivate: req?.body?.isPrivate,
         isActive: req?.body?.isActive,
@@ -678,5 +638,72 @@ export const editNewUser = asyncHandler(async (req, res) => {
 
   return res.status(200).json({
     user: user,
+  });
+});
+
+export const dashboardData = asyncHandler(async (req, res) => {
+  const totalUsers = await User.countDocuments();
+  const totalPosts = await Post.countDocuments();
+
+  res.status(200).json({
+    totalUsers,
+    totalPosts,
+  });
+});
+
+// delete User
+
+// export const deleteUserById = asyncHandler(async () => {
+//   const { userId } = req.params;
+//   const res = await User.findByIdAndDelete(userId);
+//   return res.status(200).json({ res: res });
+// });
+
+export const getUserByUsernameA = asyncHandler(async (req, res) => {
+  const { username } = req.params;
+
+  if (!username) {
+    throw new ApiError(404, "username not found");
+  }
+
+  const user = await User.findOne({ username }).lean();
+  if (!user) {
+    throw new ApiError(404, "username not found");
+  }
+  res.status(200).json({ user: user, message: "userFetched SuccessFully" });
+});
+
+export const deleteUsersByIds = asyncHandler(async (req, res) => {
+  const ids = req.body;
+
+  console.log(ids);
+
+  const deletedUsers = await User.deleteMany({ _id: { $in: ids } });
+
+  const deletedPosts = await Post.deleteMany({ userId: { $in: ids } });
+
+  const deletedFollows = await Follow.deleteMany({ followerId: { $in: ids } });
+
+  return res.status(200).json({
+    deletedUsers,
+    deletedPosts,
+    deletedFollows,
+    message: "users deleted successfully",
+  });
+});
+export const deleteUserById = asyncHandler(async (req, res) => {
+  const id = req.body.id;
+
+  const deletedUser = await User.deleteOne({ _id: id });
+
+  const deletedPost = await Post.deleteOne({ userId: id });
+
+  const deletedFollow = await Follow.deleteOne({ followerId: id });
+
+  return res.status(200).json({
+    deletedUser,
+    deletedPost,
+    deletedFollow,
+    message: "users deleted successfully",
   });
 });
