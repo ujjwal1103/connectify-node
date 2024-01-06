@@ -12,10 +12,10 @@ const postSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
-    imageUrl: {
+    imageUrl:[ {
       type: String,
       required: true,
-    },
+    }],
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

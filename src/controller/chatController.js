@@ -12,11 +12,11 @@ export const createChat = asyncHandler(async (req, res) => {
   const members = [userId, to];
   const toUser = await User.findById(to);
   if (!toUser) {
-    throw ApiError(400, `The ${to} user does not exist`);
+    throw new ApiError(400, `The ${to} user does not exist`);
   }
 
   if (to === userId) {
-    throw ApiError(
+    throw new ApiError(
       400,
       "The 'to' array cannot contain the same user as the 'from' user."
     );
@@ -26,17 +26,28 @@ export const createChat = asyncHandler(async (req, res) => {
     members: {
       $all: members,
     },
-  });
+  })
+    .populate({
+      path: "members lastMessage",
+      select: "name username _id profilePicture text from",
+    })
+    .lean();
 
   if (existingChat) {
-    throw ApiError(200, "Chat with these members already exists");
+    const friend = existingChat.members.find(
+      (member) => member._id.toString() !== userId
+    );
+    return res.status(201).json({
+      isSuccess: true,
+      chat: { ...existingChat, friend: friend },
+    });
   }
 
   //5497433 ticket
   const uniqueMembers = Array.from(new Set(members));
 
   if (uniqueMembers.length < 2) {
-    throw ApiError(400, "The chat must have at least two unique members.");
+    throw new ApiError(400, "The chat must have at least two unique members.");
   }
   const newChat = new Chat({
     members: uniqueMembers,
@@ -50,10 +61,10 @@ export const createChat = asyncHandler(async (req, res) => {
       select: "name username _id profilePicture text from",
     })
     .lean();
-  const friend = chat.members.find(
+  const friend = await chat.members.find(
     (member) => member._id.toString() !== userId
   );
-  chat.delete("members");
+  delete chat.members;
   return res.status(201).json({
     isSuccess: true,
     chat: { ...chat, friend: friend },

@@ -14,7 +14,7 @@ const startServer = () => {
 
 connectDB(process.env.MONGO_DB_URL)
   .then(() => {
-    startServer();
+    startServer();  
   })
   .catch((err) => {
     console.log("Mongo db connect error: ", err);

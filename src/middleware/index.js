@@ -2,6 +2,7 @@ import jwt from "jsonwebtoken";
 import multer from "multer";
 import asyncHandler from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
+import User from "../models/user.modal.js";
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
@@ -65,7 +66,7 @@ export const isAdmin = (req, rea, next) => {
   const secretKey = "ujjwal";
 };
 
-export const validateUsername = asyncHandler((req, res, next) => {
+export const validateUsername = asyncHandler(async (req, res, next) => {
   const usernamePattern = /^(?!^[0-9])(?!.*[^a-z0-9_]).+$/;
   const username = req.params.username;
   if (!username) {
@@ -75,6 +76,8 @@ export const validateUsername = asyncHandler((req, res, next) => {
   if (!username.match(usernamePattern)) {
     throw new ApiError(400, "Invalid username");
   }
+
+
 
   next();
 });

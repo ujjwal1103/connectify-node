@@ -8,18 +8,6 @@ export const getSingleUser =  (userId)=> {
       },
     },
     {
-        $addFields: {
-          followers: {$size: "$followers"}
-        },
-       
-    },
-    {
-      $addFields: {
-        following: {$size: "$following"}
-      }
-       
-    },
-    {
       $addFields: {
         posts: {$size: "$posts"}
       } 
@@ -32,8 +20,6 @@ export const getSingleUser =  (userId)=> {
         isPrivate: 1,
         name: 1,
         profilePicture: 1,
-        followers:1,
-        following:1,
         posts:1,
         isActive: 1,
       }
