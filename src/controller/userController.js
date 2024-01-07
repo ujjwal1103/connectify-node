@@ -99,12 +99,23 @@ export const getUser = asyncHandler(async (req, res) => {
     },
   ]);
 
+  const posts = await Post.aggregate([
+    {
+      $match: {
+        userId: new mongoose.Types.ObjectId(user?._id),
+      },
+    },
+    {
+      $count: "posts",
+    },
+  ]);
+
   return res.status(200).json({
     user: {
       ...user,
       followers: followers[0]?.followers || 0,
       following: following[0]?.following || 0,
-      posts: user.posts.length,
+      posts: posts[0]?.posts || 0,
     },
     isSuccess: true,
   });
@@ -144,6 +155,17 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
     },
   ]);
 
+  const posts = await Post.aggregate([
+    {
+      $match: {
+        userId: new mongoose.Types.ObjectId(user?._id),
+      },
+    },
+    {
+      $count: "posts",
+    },
+  ]);
+
   const isFollow = await Follow.findOne({
     followerId: userId,
     followeeId: user?._id,
@@ -154,7 +176,7 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
       ...user,
       followers: followers[0]?.followers || 0,
       following: following[0]?.following || 0,
-      posts: user.posts.length,
+      posts: posts[0]?.posts || 0,
       isFollow: !!isFollow,
     },
     isSuccess: true,
@@ -228,8 +250,6 @@ export const getFriends = async (req, res) => {
   }
 };
 
-// delete an existing user from the database
-
 export const deleteUser = async (req, res) => {
   const { userId } = req.user;
   try {
@@ -297,7 +317,6 @@ export const editUser = async (req, res) => {
   }
 };
 
-//get all user who match search
 export const searchUsers = async (req, res) => {
   const { userId } = req.user;
   const { query } = req.query;
@@ -330,155 +349,6 @@ export const searchUsers = async (req, res) => {
     });
   }
 };
-
-// send list of all followers of requested user
-
-// export const getFollowers = asyncHandler(async (req, res) => {
-//   const { userId } = req.params;
-//   const { userId: currentUserId } = req.user;
-
-//   console.log(userId, currentUserId);
-
-//   const isSameUser = currentUserId === userId;
-
-//   const users = await User.aggregate([
-//     {
-//       $match: { _id: new mongoose.Types.ObjectId(userId) }, // Match the specific user
-//     },
-//     {
-//       $project: {
-//         followers: 1,
-//         _id: 0,
-//       },
-//     },
-//     {
-//       $unwind: {
-//         path: "$followers",
-//       },
-//     },
-//     {
-//       $lookup: {
-//         from: "users",
-//         localField: "followers",
-//         foreignField: "_id",
-//         as: "follower",
-//       },
-//     },
-//     {
-//       $addFields: {
-//         _id: { $first: "$follower._id" },
-//         username: { $first: "$follower.username" },
-//         name: { $first: "$follower.name" },
-//         profilePicture: { $first: "$follower.profilePicture" },
-//         canRemove: {
-//           $cond: {
-//             if: isSameUser,
-//             then: true,
-//             else: false,
-//           },
-//         },
-//         isFollow: {
-//           $cond: {
-//             if: isSameUser,
-//             then: true,
-//             else: {
-//               $in: [
-//                 new mongoose.Types.ObjectId(currentUserId),
-//                 "$follower._id",
-//               ],
-//             },
-//           },
-//         },
-//       },
-//     },
-//     {
-//       $project: {
-//         _id: 1,
-//         username: 1,
-//         profilePicture: 1,
-//         isFollow: 1,
-//         name: 1,
-//         canRemove: 1,
-//       },
-//     },
-//   ]);
-
-//   if (users.length) {
-//     return res.status(200).json({
-//       users: users,
-//       isSuccess: true,
-//     });
-//   }
-// });
-
-// export const getFollowing = asyncHandler(async (req, res) => {
-//   const { userId } = req.params;
-//   const { userId: currentUserId } = req.user;
-
-//   const isSameUser = currentUserId === userId;
-
-//   const users = await User.aggregate([
-//     {
-//       $match: { _id: new mongoose.Types.ObjectId(userId) }, // Match the specific user
-//     },
-//     {
-//       $project: {
-//         following: 1,
-//         _id: 0,
-//       },
-//     },
-//     {
-//       $unwind: {
-//         path: "$following",
-//       },
-//     },
-//     {
-//       $lookup: {
-//         from: "users",
-//         localField: "following",
-//         foreignField: "_id",
-//         as: "following",
-//       },
-//     },
-//     {
-//       $addFields: {
-//         _id: { $first: "$following._id" },
-//         username: { $first: "$following.username" },
-//         name: { $first: "$following.name" },
-//         profilePicture: { $first: "$following.profilePicture" },
-//         isFollow: {
-//           $cond: {
-//             if: isSameUser,
-//             then: true,
-//             else: {
-//               $in: [
-//                 new mongoose.Types.ObjectId(currentUserId),
-//                 "$following._id",
-//               ],
-//             },
-//           },
-//         },
-//       },
-//     },
-//     {
-//       $project: {
-//         _id: 1,
-//         username: 1,
-//         profilePicture: 1,
-//         isFollow: 1,
-//         name: 1,
-//       },
-//     },
-//   ]);
-//   if (!users?.length) {
-//     throw new ApiError(400, `users not found`);
-//   }
-
-//   return res.status(200).json({
-//     users: users,
-//     isSuccess: true,
-//   });
-// });
 
 const getGoogleAuthToken = async (code) => {
   const url = "https://oauth2.googleapis.com/token";
@@ -609,6 +479,57 @@ export const getAllUsers = asyncHandler(async (req, res) => {
     totalPages: totalPages,
   });
 });
+export const getAllUsersIds = asyncHandler(async (req, res) => {
+  const page = req.query.page || 1;
+  const size = 10;
+  const usernameQuery = req.query.username;
+
+  let pipeline = [];
+
+  if (usernameQuery) {
+    // If username query parameter exists, add a $match stage to the pipeline
+    pipeline.push({
+      $match: { username: { $regex: `^${usernameQuery}`, $options: "i" } },
+    });
+  }
+
+  // Add the $facet stage to get total count and paginated results
+  pipeline.push(
+    {
+      $facet: {
+        metadata: [{ $count: "total" }],
+        users: [
+          { $sort: { updatedAt: -1 } },
+          { $skip: (page - 1) * size },
+          { $limit: size },
+          {
+            $project: {
+              _id: 1,
+              username: 1,
+              value: "$_id",
+              label: "$username",
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: "$metadata",
+    }
+  );
+
+  // Execute the aggregation pipeline
+  const [data] = await User.aggregate(pipeline);
+
+  const totalPages = Math.ceil(data?.metadata?.total / size);
+
+  return res.status(200).json({
+    users: data?.users || [],
+    currentPage: page,
+    totalPages: totalPages,
+  });
+});
+
 export const createNewUser = asyncHandler(async (req, res) => {
   return res.status(200).json({
     users: users,
@@ -650,14 +571,6 @@ export const dashboardData = asyncHandler(async (req, res) => {
     totalPosts,
   });
 });
-
-// delete User
-
-// export const deleteUserById = asyncHandler(async () => {
-//   const { userId } = req.params;
-//   const res = await User.findByIdAndDelete(userId);
-//   return res.status(200).json({ res: res });
-// });
 
 export const getUserByUsernameA = asyncHandler(async (req, res) => {
   const { username } = req.params;

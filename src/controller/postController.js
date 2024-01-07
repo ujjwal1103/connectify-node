@@ -370,7 +370,7 @@ export const fetchLikesByPostId = asyncHandler(async (req, res) => {
 
 export const getAllPosts = async (req, res) => {
   const page = parseInt(req.query.page) || 1; // Current page number
-  const perPage = parseInt(req.query.size) || 10;
+  const perPage = parseInt(req.query.size) || 5;
   const username = req.query.username;
   // Number of posts per page
   let query = {}; // Default empty query object
@@ -379,12 +379,9 @@ export const getAllPosts = async (req, res) => {
     // If username query parameter exists, create a query to search by username starting with the query string
     query = { username: { $regex: `^${username}`, $options: "i" } };
   }
-  console.log(query);
+
   try {
-    const posts = await Post.aggregate([
-      {
-        $sort: { updatedAt: -1 },
-      },
+    const totalPosts = await Post.aggregate([
       {
         $lookup: {
           from: "users", // Change to the appropriate collection name for users
@@ -399,7 +396,36 @@ export const getAllPosts = async (req, res) => {
       {
         $project: {
           _id: 1,
+          username: "$user.username",
+        },
+      },
 
+      {
+        $match: query,
+      },
+      {
+        $count: "totalCount",
+      },
+    ]);
+
+    const totalPostsCount =
+      totalPosts.length > 0 ? totalPosts[0].totalCount : 0;
+
+    const posts = await Post.aggregate([
+      {
+        $lookup: {
+          from: "users", // Change to the appropriate collection name for users
+          localField: "userId",
+          foreignField: "_id",
+          as: "user",
+        },
+      },
+      {
+        $unwind: "$user",
+      },
+      {
+        $project: {
+          _id: 1,
           userId: "$user._id",
           username: "$user.username",
           name: "$user.name",
@@ -419,13 +445,16 @@ export const getAllPosts = async (req, res) => {
       {
         $limit: perPage,
       },
+      {
+        $sort: { updatedAt: -1 },
+      },
     ]);
 
     return res.status(200).json({
       posts: posts,
       currentPage: page,
-      totalPages: Math.ceil(posts.length / perPage),
-      totalPosts: posts.length,
+      totalPages: Math.ceil(totalPostsCount / perPage),
+      totalPosts: totalPostsCount,
       message: "Posts fetched successfully",
       isSuccess: true,
     });
