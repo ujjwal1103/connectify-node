@@ -20,6 +20,7 @@ import {
   getUserByUsernameA,
   deleteUsersByIds,
   deleteUserById,
+  getAllUsersIds,
 } from "../controller/userController.js";
 import { upload, validateUsername, verifyToken } from "../middleware/index.js";
 const router = express.Router();
@@ -46,6 +47,7 @@ router.get("/createUsers", createUsers);
 
 //! get routes
 router.get("/admin/users", getAllUsers);
+router.get("/admin/usersIds", getAllUsersIds);
 router.get("/admin/dashboard", dashboardData);
 router.get("/admin/user/:username", getUserByUsernameA);
 
