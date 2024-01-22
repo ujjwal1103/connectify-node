@@ -38,9 +38,11 @@ export const unfollowUser = asyncHandler(async (req, res) => {
 
 export const getFollowers = asyncHandler(async (req, res) => {
   const { userId } = req.params;
-  const { userId: currUserId } = req.params;
+  const { userId: currUserId } = req.user;
 
   const sameUser = userId === currUserId;
+
+  console.log(sameUser);
 
   const followers = await Follow.aggregate([
     {
@@ -69,17 +71,14 @@ export const getFollowers = asyncHandler(async (req, res) => {
       $unwind: "$follower",
     },
     {
+      $addFields: {},
+    },
+    {
       $addFields: {
         isFollow: {
           $eq: [new mongoose.Types.ObjectId(currUserId), "$followeeId"],
         },
-      },
-    },
-    {
-      $addFields: {
-        canRemove: {
-          $eq: [sameUser, "$isFollow"],
-        },
+        canRemove: sameUser,
       },
     },
 

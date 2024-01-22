@@ -6,6 +6,7 @@ import commentRouter from "./commentRoutes.js";
 import chatRouter from "./chatRoutes.js";
 import messageRouter from "./messageRoutes.js";
 import followRouter from "./follow.route.js";
+import likeRouter from "./like.route.js";
 
 export {
   userRouter,
@@ -16,4 +17,5 @@ export {
   chatRouter,
   messageRouter,
   followRouter,
+  likeRouter,
 };

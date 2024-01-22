@@ -5,12 +5,32 @@ import jwt from "jsonwebtoken";
 import QueryString from "qs";
 import asyncHandler from "./../utils/asyncHandler.js";
 import { ApiError } from "./../utils/ApiError.js";
-import { deleteImage, uploadImage } from "../utils/uploadImage.js";
+import { uploadImage } from "../utils/uploadImage.js";
 import mongoose from "mongoose";
-import { getSingleUser } from "../aggregations/user.js";
+
 import { users } from "../userdata.js";
 import Post from "../models/post.modal.js";
 import { Follow } from "../models/follow.model.js";
+
+const generateAccessAndRefreshTokens = async (userId) => {
+  try {
+    const user = await User.findById(userId);
+
+    const accessToken = user.generateAccessToken();
+    const refreshToken = user.generateRefreshToken();
+
+    // attach refresh token to the user document to avoid refreshing the access token with multiple refresh tokens
+    user.refreshToken = refreshToken;
+
+    await user.save({ validateBeforeSave: false });
+    return { accessToken, refreshToken };
+  } catch (error) {
+    throw new ApiError(
+      500,
+      "Something went wrong while generating the access token"
+    );
+  }
+};
 
 // register a new user to connectify
 export const registerUser = asyncHandler(async (req, res) => {
@@ -20,9 +40,15 @@ export const registerUser = asyncHandler(async (req, res) => {
   ) {
     throw new ApiError(400, "All feilds are required");
   }
-  const existingUser = await User.findOne({ username });
+  const existingUser = await User.findOne({
+    $or: [{ username }, { email }],
+  });
+
   if (existingUser) {
-    throw new ApiError(409, `User with ${username} already exists`);
+    throw new ApiError(
+      409,
+      `User with ${username} and ${email} already exists`
+    );
   }
 
   const salt = bcrypt.genSaltSync(10);
@@ -43,33 +69,41 @@ export const registerUser = asyncHandler(async (req, res) => {
 // login to connectify
 export const loginUser = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
-  const user = await User.findOne({ username })
-    .select("username email name password")
-    .lean();
+  const user = await User.findOne({ username }).select(
+    "username email name password"
+  ).lean();
   if (!user) {
     throw new ApiError(400, `user with ${username} not found`);
   }
   const matchPassword = await bcrypt.compare(password, user.password);
   if (!matchPassword) {
-    throw new ApiError(400, "Incorrect username name and password");
+    throw new ApiError(400, "Incorrect username and password");
   }
-  const token = jwt.sign(
-    { userId: user._id, username: user.username },
-    process.env.JWT_SECREATE,
-    { expiresIn: process.env.JWT_EXPIRE }
-  );
+
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(user?._id)
   delete user.password;
+  delete user?.refreshToken;
+
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
 
   return res
     .status(201)
-    .json({ user: { ...user }, isSuccess: true, token: token });
+    .cookie("accessToken", accessToken, options) 
+    .cookie("refreshToken", refreshToken, options)
+    .json({
+      user: { ...user },
+      isSuccess: true,
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+    });
 });
 
 //get info of logged in user
 export const getUser = asyncHandler(async (req, res) => {
   const { userId } = req.user;
-
-  console.log(userId);
 
   const user = await User.findOne({ _id: userId }).lean();
 
@@ -186,15 +220,36 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
 export const getUsers = async (req, res) => {
   const { userId } = req.user;
   try {
-    const currentUser = await User.findOne({ _id: userId });
-    const followingList = currentUser.following;
-    const users = await User.find({
-      _id: { $ne: userId, $nin: followingList },
-    })
-      .select("_id username name profilePicture")
-      .limit(5);
+    const users = await User.aggregate([
+      {
+        $match: {
+          _id: { $ne: new mongoose.Types.ObjectId(userId) },
+        },
+      },
+      {
+        $lookup: {
+          from: "follows",
+          localField: "_id",
+          foreignField: "followeeId",
+          as: "followers",
+        },
+      },
+      {
+        $match: {
+          followers: {
+            $not: {
+              $elemMatch: { followerId: new mongoose.Types.ObjectId(userId) },
+            },
+          },
+        },
+      },
+      {
+        $limit: 5,
+      },
+    ]);
 
     return res.status(200).json({
+      userId: userId,
       users: users,
       isSuccess: true,
     });
@@ -215,10 +270,9 @@ export const getFriends = async (req, res) => {
 
     const currentUser = await User.findOne({ _id: userId });
 
-    const followingList = currentUser.following;
-    const followersList = currentUser.followers;
+    const followingList = currentUser?.following;
+    const followersList = currentUser?.followers;
 
-    // Merge followers and following list to get all connected users
     const connectedUsers = [...followingList, ...followersList, userId];
 
     const users = await User.find({
@@ -446,8 +500,6 @@ export const createUsers = asyncHandler(async (req, res) => {
       username: user.username,
     });
   });
-
-  console.log(u);
 
   return res.status(201).json({ message: "Users created successfully" });
 });

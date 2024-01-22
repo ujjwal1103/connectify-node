@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
-
+import { AvailableSocialLogins, UserLoginType } from "../constants/index.js";
+import jwt from "jsonwebtoken";
 const userSchema = new mongoose.Schema(
   {
     username: {
@@ -15,6 +16,15 @@ const userSchema = new mongoose.Schema(
       required: [true, "email is required"],
       trim: true,
       lowercase: true,
+    },
+    isEmailVerified: {
+      type: Boolean,
+      default: false,
+    },
+    loginType: {
+      type: String,
+      enum: AvailableSocialLogins,
+      default: UserLoginType.EMAIL_PASSWORD,
     },
     mobile: {
       type: Number,
@@ -31,10 +41,10 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: ["male", "female"],
     },
-    profilePicture: {
+    avatar: {
       type: String,
     },
-    coverPhoto: {
+    coverImage: {
       type: String,
     },
     bio: {
@@ -52,18 +62,6 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
-    sentfriendRequest: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
-    receivedfriendRequest: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-      },
-    ],
     name: {
       type: String,
     },
@@ -71,11 +69,39 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    refreshToken: {
+      type: String,
+    },
   },
   { timestamps: true }
 );
 
 userSchema.plugin(mongooseAggregatePaginate);
+
+userSchema.methods.generateAccessToken = function () {
+  console.log(this);
+  return jwt.sign(
+    {
+      userId: this._id,
+      email: this.email,
+      username: this.username,
+    },
+    process.env.JWT_ACCESS_SECREATE,
+    { expiresIn: process.env.JWT_ACCESS_EXPIRE }
+  );
+};
+
+userSchema.methods.generateRefreshToken = function () {
+  console.log(this);
+  return jwt.sign(
+    {
+      userId: this._id,
+    },
+    process.env.JWT_REFRESS_SECREATE,
+    { expiresIn: process.env.JWT_REFRESS_EXPIRE }
+  );
+};
+
 const User = mongoose.model("User", userSchema);
 
 export default User;

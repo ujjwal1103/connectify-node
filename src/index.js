@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import { httpServer } from "./app.js";
 import connectDB from "./db/index.js";
+import { runSocket } from "./socket.js";
 
 dotenv.config({
   path: "./.env",
@@ -14,7 +15,8 @@ const startServer = () => {
 
 connectDB(process.env.MONGO_DB_URL)
   .then(() => {
-    startServer();  
+    runSocket();
+    startServer();
   })
   .catch((err) => {
     console.log("Mongo db connect error: ", err);

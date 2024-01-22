@@ -5,6 +5,71 @@ import { ApiError } from "../utils/ApiError.js";
 import { deleteImage, uploadImage } from "../utils/uploadImage.js";
 import asyncHandler from "./../utils/asyncHandler.js";
 
+const postCommonAggregation = (req) => {
+  return [
+    {
+      $lookup: {
+        from: "comments",
+        localField: "_id",
+        foreignField: "postId",
+        as: "comments",
+      },
+    },
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "postId",
+        as: "likes",
+      },
+    },
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "postId",
+        as: "isLiked",
+        pipeline: [
+          {
+            $match: {
+              likedBy: new mongoose.Types.ObjectId(req.user?.userId),
+            },
+          },
+        ],
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "_id",
+        foreignField: "userId",
+        as: "user",
+      },
+    },
+    {
+      $addFields: {
+        user: { $first: "$user" },
+        likes: { $size: "$likes" },
+        comments: { $size: "$comments" },
+        isLiked: {
+          $cond: {
+            if: {
+              $gte: [
+                {
+                  $size: "$isLiked",
+                },
+                1,
+              ],
+            },
+            then: true,
+            else: false,
+          },
+        },
+      },
+    },
+  ];
+};
+
 export const createPost = asyncHandler(async (req, res) => {
   let { caption } = req.body;
 
@@ -32,10 +97,6 @@ export const createPost = asyncHandler(async (req, res) => {
   let post = new Post(newPost);
   post = await post.save();
 
-  const user = await User.findById(req.user.userId);
-  user.posts.push(post._id);
-  await user.save();
-
   return res.status(200).json({
     post: post,
     message: "post created successfully",
@@ -44,187 +105,250 @@ export const createPost = asyncHandler(async (req, res) => {
 });
 
 // fetch all posts
-export const fetchAllPosts = async (req, res) => {
+export const fetchAllPosts = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const page = parseInt(req.query.page) || 1;
   const perPage = 10; // Number of posts per page
+  const totalPosts = await Post.countDocuments();
+  const totalPages = Math.ceil(totalPosts / perPage);
 
-  try {
-    const totalPosts = await Post.countDocuments();
-    const totalPages = Math.ceil(totalPosts / perPage);
-
-    const posts = await Post.aggregate([
-      {
-        $sort: { updatedAt: -1 },
-      },
-      {
-        $skip: (page - 1) * perPage,
-      },
-      {
-        $limit: perPage,
-      },
-      {
-        $lookup: {
-          from: "users",
-          localField: "userId",
-          foreignField: "_id",
-          as: "user",
-          pipeline: [
-            {
-              $project: {
-                username: 1,
-                name: 1,
-                profilePicture: 1,
-              },
+  const posts = await Post.aggregate([
+    {
+      $sort: { updatedAt: -1 },
+    },
+    {
+      $skip: (page - 1) * perPage,
+    },
+    {
+      $limit: perPage,
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: "userId",
+        foreignField: "followeeId",
+        as: "isFollow",
+        pipeline: [
+          {
+            $match: {
+              followerId: new mongoose.Types.ObjectId(userId),
             },
-          ],
-        },
+          },
+        ],
       },
-      {
-        $addFields: {
-          user: { $first: "$user" },
-          isLiked: { $in: [new mongoose.Types.ObjectId(userId), "$likedBy"] },
-        },
+    },
+    {
+      $addFields: {
+        isFollow: { $arrayElemAt: ["$isFollow", 0] },
       },
-    ]);
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "user",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              name: 1,
+              profilePicture: 1,
+            },
+          },
+        ],
+      },
+    },
 
-    return res.status(200).json({
-      posts,
-      totalPages: totalPages,
-      currentPage: page,
-      message: "Posts fetched successfully",
-      isSuccess: true,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      error: error,
-      message: error.message || "Internal server error",
-      isSuccess: false,
-    });
-  }
-};
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "postId",
+        as: "like",
+      },
+    },
+    {
+      $addFields: {
+        user: { $first: "$user" },
+        isLiked: {
+          $in: [new mongoose.Types.ObjectId(userId), "$like.likedBy"],
+        },
+        like: { $size: "$like" },
+        isFollow: {
+          $eq: [new mongoose.Types.ObjectId(userId), "$isFollow.followerId"],
+        },
+      },
+    },
+  ]);
+
+  return res.status(200).json({
+    posts,
+    totalPages,
+    currentPage: page,
+    totalPosts,
+    hasNext: page !== totalPages,
+    isSuccess: true,
+  });
+});
 
 export const fetchAllPostsByUser = async (req, res) => {
   const { userId } = req.user;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 6; // Number of posts per page
+  const totalPosts = await Post.countDocuments({ userId });
+  const totalPages = Math.ceil(totalPosts / limit);
 
-  try {
-    let posts = await Post.find({ userId })
-      .sort({ createdAt: -1 })
-      .populate("userId", "username name _id profilePicture")
-      .lean();
+  const skip = (page - 1) * limit;
 
-    posts = posts.map((post) => {
-      if (post.likedBy?.some((id) => id.toString() === userId)) {
-        return { ...post, isLiked: true };
-      } else {
-        return { ...post, isLiked: false };
-      }
-    });
+  const paginationObject = {
+    totalPosts,
+    skip,
+    hasNextPage: page * limit < totalPosts,
+    totalPages: Math.ceil(totalPosts / limit),
+    currentPage: parseInt(page),
+  };
 
-    return res.status(200).json({
-      posts: posts,
-      message: "posts fetched successfully",
-      isSuccess: true,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      error: error,
-      message: error.message || "Internal server error",
-      isSuccess: false,
-    });
-  }
-};
-// fetch all posts by username
-export const fetchAllPostsByUserId = async (req, res) => {
-  const { userId } = req.params;
-
-  try {
-    let posts = await Post.find({ userId })
-      .sort({
-        createdAt: -1,
-      })
-      .populate("userId", "username name _id profilePicture")
-      .lean();
-
-    posts = posts.map((post) => {
-      if (post.likedBy?.some((id) => id.toString() === userId)) {
-        return { ...post, isLiked: true };
-      } else {
-        return { ...post, isLiked: false };
-      }
-    });
-
-    return res.status(200).json({
-      posts: posts,
-      message: "posts fetched successfully",
-      isSuccess: true,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      error: error,
-      message: error.message || "Internal server error",
-      isSuccess: false,
-    });
-  }
-};
-
-export const likePosts = async (req, res) => {
-  try {
-    const { postId } = req.params;
-    const { userId } = req.user;
-
-    const updatedPost = await Post.findOneAndUpdate(
-      { _id: postId },
-      { $inc: { likeCount: 1 }, $addToSet: { likedBy: userId } },
-      { new: true }
-    );
-
-    if (!updatedPost) {
-      return res.status(404).json({ message: "Post not found" });
-    }
-    return res.status(200).json({
-      message: "post liked successfully",
-      isSuccess: true,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      error: error,
-      message: error.message || "Internal server error",
-      isSuccess: false,
-    });
-  }
-};
-
-export const unlikePost = async (req, res) => {
-  try {
-    const { postId } = req.params;
-    const { userId } = req.user;
-
-    const updatedPost = await Post.findOneAndUpdate(
-      { _id: postId },
-      {
-        $inc: { likeCount: -1 }, // Decrement the likeCount field by 1
-        $pull: { likedBy: userId }, // Remove userId from the likedBy array
+  const posts = await Post.aggregate([
+    {
+      $match: {
+        userId: new mongoose.Types.ObjectId(userId),
       },
-      { new: true }
-    );
+    },
+    {
+      $sort: { updatedAt: -1 },
+    },
+    {
+      $skip: skip,
+    },
+    {
+      $limit: limit,
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "user",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              name: 1,
+              profilePicture: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "postId",
+        as: "like",
+      },
+    },
+    {
+      $addFields: {
+        user: { $first: "$user" },
+        isLiked: {
+          $in: [new mongoose.Types.ObjectId(userId), "$like.likedBy"],
+        },
+        like: { $size: "$like" },
+      },
+    },
+  ]);
 
-    if (!updatedPost) {
-      return res.status(404).json({ message: "Post not found" });
-    }
+  const p = await Post.aggregate([...postCommonAggregation(req)]);
 
-    return res.status(200).json({
-      message: "Post unliked successfully",
-      isSuccess: true,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      error: error,
-      message: error.message || "Internal server error",
-      isSuccess: false,
-    });
-  }
+  return res
+    .status(200)
+    .json({ posts, p: p, isSuccess: true, ...paginationObject });
 };
+
+export const fetchAllPostsByUserId = asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+  const { userId: currUserId } = req.user;
+
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 6;
+
+  const allPosts = await Post.aggregate([
+    {
+      $match: {
+        userId: new mongoose.Types.ObjectId(userId),
+      },
+    },
+    {
+      $count: "totalPosts",
+    },
+  ]);
+
+  const totalPosts = allPosts[0].totalPosts;
+  const skip = (page - 1) * limit;
+
+  const paginationObject = {
+    totalPosts,
+    skip,
+    hasNextPage: page * limit < totalPosts,
+    totalPages: Math.ceil(totalPosts / limit),
+    currentPage: parseInt(page),
+  };
+
+  const posts = await Post.aggregate([
+    {
+      $match: {
+        userId: new mongoose.Types.ObjectId(userId),
+      },
+    },
+    {
+      $sort: { updatedAt: -1 },
+    },
+    {
+      $skip: skip,
+    },
+    {
+      $limit: limit,
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "user",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              name: 1,
+              profilePicture: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "postId",
+        as: "like",
+      },
+    },
+    {
+      $addFields: {
+        user: { $first: "$user" },
+        isLiked: {
+          $in: [new mongoose.Types.ObjectId(currUserId), "$like.likedBy"],
+        },
+        like: { $size: "$like" },
+      },
+    },
+  ]);
+
+  return res.status(200).json({ posts, isSuccess: true, ...paginationObject });
+});
 
 export const deletePost = async (req, res) => {
   const { postId } = req.params;
@@ -253,120 +377,87 @@ export const deletePost = async (req, res) => {
   }
 };
 
-export const getSinglePost = async (req, res) => {
-  const { postId } = req.params;
-  try {
-    const post = await Post.findById(postId)
-      .populate("userId", "username name _id profilePicture")
-      .lean();
-    if (post) {
-      return res.status(200).json({
-        message: "post fetched successfully",
-        post: post,
-        isSuccess: true,
-      });
-    } else {
-      return res.status(500).json({
-        error: error,
-        message: "Post not found",
-        isSuccess: false,
-      });
-    }
-  } catch (error) {
-    return res.status(500).json({
-      error: error,
-      message: error.message || "Internal server error",
-      isSuccess: false,
-    });
-  }
-};
-
-export const fetchLikesByPostId = asyncHandler(async (req, res) => {
+export const getSinglePost = asyncHandler(async (req, res) => {
   const { postId } = req.params;
 
-  const likes = await Post.aggregate([
+  const p = await Post.aggregate([
     {
       $match: {
         _id: new mongoose.Types.ObjectId(postId),
       },
     },
     {
-      $unwind: "$likedBy",
-    },
-    {
       $lookup: {
         from: "users",
-        localField: "likedBy",
+        localField: "userId",
         foreignField: "_id",
         as: "user",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              name: 1,
+              profilePicture: 1,
+            },
+          },
+        ],
       },
     },
+
     {
       $unwind: "$user",
     },
     {
-      $project: {
-        _id: 0,
-        likedBy: {
-          _id: "$user._id",
-          username: "$user.username",
-          profilePicture: "$user.profilePicture",
-        },
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        likedBy: {
-          $push: {
-            _id: "$likedBy._id",
-            username: "$likedBy.username",
-            profilePicture: "$likedBy.profilePicture",
+      $lookup: {
+        from: "likes",
+        localField: "_id",
+        foreignField: "postId",
+        as: "like",
+        pipeline: [
+          {
+            $count: "like",
           },
-        },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        like: { $first: "$like" },
+      },
+    },
+    {
+      $addFields: {
+        like: "$like.like",
       },
     },
     {
       $project: {
-        _id: 0,
-        likedBy: 1,
+        user: 1,
+        imageUrl: 1,
+        like: 1,
+        caption: 1,
+        hashtags: 1,
+        createdAt: 1,
       },
     },
   ]);
 
-  return res.status(200).json({ likes: likes[0].likedBy });
+  if (p[0]) {
+    return res.status(200).json({
+      message: "post fetched successfully",
+      post: p[0],
+      isSuccess: true,
+    });
+  } else {
+    return res.status(500).json({
+      error: error,
+      message: "Post not found",
+      isSuccess: false,
+    });
+  }
 });
 
 /// admin controllers
-
-// export const getAllPosts = async (req, res) => {
-//   const page = parseInt(req.query.page) || 1; // Current page number
-//   const perPage = parseInt(req.query.size) || 10; // Number of posts per page
-//   try {
-//     const totalPosts = await Post.countDocuments();
-//     let posts = await Post.find()
-//       .populate("userId", "username name _id profilePicture")
-//       .sort({ updatedAt: -1 })
-//       .skip((page - 1) * perPage) // Calculate the number of posts to skip
-//       .limit(perPage) // Limit the number of posts per page
-//       .lean();
-
-//     return res.status(200).json({
-//       posts: posts,
-//       currentPage: page,
-//       totalPages: Math.ceil(totalPosts / perPage),
-//       totalPosts: totalPosts,
-//       message: "Posts fetched successfully",
-//       isSuccess: true,
-//     });
-//   } catch (error) {
-//     return res.status(500).json({
-//       error: error,
-//       message: error.message || "Internal server error",
-//       isSuccess: false,
-//     });
-//   }
-// };
 
 export const getAllPosts = async (req, res) => {
   const page = parseInt(req.query.page) || 1; // Current page number
@@ -413,6 +504,9 @@ export const getAllPosts = async (req, res) => {
 
     const posts = await Post.aggregate([
       {
+        $sort: { updatedAt: -1 },
+      },
+      {
         $lookup: {
           from: "users", // Change to the appropriate collection name for users
           localField: "userId",
@@ -444,9 +538,6 @@ export const getAllPosts = async (req, res) => {
       },
       {
         $limit: perPage,
-      },
-      {
-        $sort: { updatedAt: -1 },
       },
     ]);
 
@@ -506,14 +597,14 @@ export const createPostByAdmin = asyncHandler(async (req, res) => {
     isSuccess: true,
   });
 });
-export const updatePostByAdmin = asyncHandler(async (req, res) => {
-  const { userId } = req.params;
+export const updatePostByIdAdmin = asyncHandler(async (req, res) => {
+  const { postId: _id } = req.params;
   const { imageUrl, caption } = req.body;
 
-  const user = await User.findById(userId);
+  const p = await Post.findById(_id);
 
-  if (!user) {
-    throw new ApiError(400, "user does not exist");
+  if (!p) {
+    throw new ApiError(400, "post does not exist");
   }
 
   if (!imageUrl) {
@@ -531,7 +622,7 @@ export const updatePostByAdmin = asyncHandler(async (req, res) => {
   }
 
   const post = await Post.findOneAndUpdate(
-    { userId: userId },
+    { _id },
     {
       $set: {
         imageUrl: [...imageUrl],

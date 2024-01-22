@@ -22,7 +22,8 @@ export const verifyToken = asyncHandler((req, res, next) => {
   if (!token) {
     throw new ApiError(401, "Unauthorized: No token provided");
   }
-  const secretKey = process.env.JWT_SECREATE;
+
+  const secretKey = process.env.JWT_ACCESS_SECREATE;
 
   jwt.verify(token, secretKey, (err, decoded) => {
     if (err) {
@@ -76,8 +77,6 @@ export const validateUsername = asyncHandler(async (req, res, next) => {
   if (!username.match(usernamePattern)) {
     throw new ApiError(400, "Invalid username");
   }
-
-
 
   next();
 });

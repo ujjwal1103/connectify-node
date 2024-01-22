@@ -13,7 +13,7 @@ export const createStory = asyncHandler(async (req, res) => {
     throw new ApiError(400, `story creation failed`);
   }
   const userStories = await UserStories.findOne({ user: userId }).lean();
-  console.log(userStories);
+  
   if (userStories) {
     const updatedUserStories = await UserStories.findOneAndUpdate(
       { user: userId },
