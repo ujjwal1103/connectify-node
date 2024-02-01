@@ -13,6 +13,7 @@ import {
   userRouter,
   followRouter,
   likeRouter,
+  uploadRouter
 } from "./routes/index.js";
 import { ApiError } from "./utils/ApiError.js";
 import asyncHandler from "./utils/asyncHandler.js";
@@ -31,14 +32,14 @@ export const io = new Server(httpServer, {
   },
 });
 
-// Rate limiter to avoid misuse of the service and avoid cost spikes
+
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5000, // Limit each IP to 500 requests per `window` (here, per 15 minutes)
-  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
-  keyGenerator: (req, res) => {
-    return req.clientIp; // IP address from requestIp.mw(), as opposed to req.ip
+  windowMs: 15 * 60 * 1000, 
+  max: 5000, 
+  standardHeaders: true, 
+  legacyHeaders: false, 
+  keyGenerator: (req, _) => {
+    return req.clientIp; 
   },
   handler: (_, __, ___, options) => {
     throw new ApiError(
@@ -50,7 +51,7 @@ const limiter = rateLimit({
   },
 });
 
-// Apply the rate limiting middleware to all requests
+
 app.use(limiter);
 
 app.use(express.json({ limit: "16kb" }));
@@ -69,6 +70,7 @@ app.use("/api", chatRouter);
 app.use("/api", messageRouter);
 app.use("/api", followRouter);
 app.use("/api", likeRouter);
+app.use("/api", uploadRouter);
 
 app.get(
   "/api/validetoken",

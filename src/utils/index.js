@@ -1,3 +1,5 @@
+import mongoose from "mongoose";
+
 export function formatDateDifference(date) {
   const now = new Date();
   const timeDifference = now - date;
@@ -25,4 +27,6 @@ export function formatDateDifference(date) {
   }
 }
 
-
+export const getObjectId = (id) => {
+  return new mongoose.Types.ObjectId(id);
+};

@@ -19,7 +19,7 @@ export const getSingleUser =  (userId)=> {
         isAdmin: 1,
         isPrivate: 1,
         name: 1,
-        profilePicture: 1,
+        avatar: 1,
         posts:1,
         isActive: 1,
       }
@@ -57,7 +57,7 @@ export const getSingleUserByUsername =  (username)=> {
         isAdmin: 1,
         isPrivate: 1,
         name: 1,
-        profilePicture: 1,
+        avatar: 1,
         followers:1,
         following:1,
         posts:1,

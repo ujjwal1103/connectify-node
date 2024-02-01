@@ -108,39 +108,11 @@ export const createPost = asyncHandler(async (req, res) => {
 export const fetchAllPosts = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const page = parseInt(req.query.page) || 1;
-  const perPage = 10; // Number of posts per page
-  const totalPosts = await Post.countDocuments();
-  const totalPages = Math.ceil(totalPosts / perPage);
-
+  const perPage = 3; // Number of posts per page
+  const Id = new mongoose.Types.ObjectId(userId);
   const posts = await Post.aggregate([
     {
       $sort: { updatedAt: -1 },
-    },
-    {
-      $skip: (page - 1) * perPage,
-    },
-    {
-      $limit: perPage,
-    },
-    {
-      $lookup: {
-        from: "follows",
-        localField: "userId",
-        foreignField: "followeeId",
-        as: "isFollow",
-        pipeline: [
-          {
-            $match: {
-              followerId: new mongoose.Types.ObjectId(userId),
-            },
-          },
-        ],
-      },
-    },
-    {
-      $addFields: {
-        isFollow: { $arrayElemAt: ["$isFollow", 0] },
-      },
     },
     {
       $lookup: {
@@ -153,13 +125,69 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
             $project: {
               username: 1,
               name: 1,
-              profilePicture: 1,
+              avatar: 1,
+              isPrivate: 1,
+            },
+          },
+          {
+            $lookup: {
+              from: "follows",
+              localField: "_id",
+              foreignField: "followeeId",
+              as: "isFollow",
+              pipeline: [
+                {
+                  $match: {
+                    followerId: Id,
+                  },
+                },
+              ],
+            },
+          },
+          {
+            $addFields: {
+              isFollow: {
+                $cond: {
+                  if: {
+                    $gte: [
+                      {
+                        $size: "$isFollow",
+                      },
+                      1,
+                    ],
+                  },
+                  then: true,
+                  else: false,
+                },
+              },
+            },
+          },
+          {
+            $addFields: {
+              showPost: {
+                $cond: {
+                  if: {
+                    $eq: ["$isFollow", "$isPrivate"],
+                  },
+                  then: true,
+                  else: { $not: "$isPrivate" },
+                },
+              },
             },
           },
         ],
       },
     },
-
+    {
+      $unwind: "$user",
+    },
+    {
+      $match: {
+        $expr: {
+          $eq: ["$user.showPost", true],
+        },
+      },
+    },
     {
       $lookup: {
         from: "likes",
@@ -170,24 +198,34 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
     },
     {
       $addFields: {
-        user: { $first: "$user" },
         isLiked: {
-          $in: [new mongoose.Types.ObjectId(userId), "$like.likedBy"],
+          $in: [Id, "$like.likedBy"],
         },
         like: { $size: "$like" },
-        isFollow: {
-          $eq: [new mongoose.Types.ObjectId(userId), "$isFollow.followerId"],
-        },
       },
     },
+    {
+      $match: {
+        isLiked: false,
+      },
+    },
+    {
+      $skip: (page - 1) * perPage,
+    },
+    {
+      $limit: perPage,
+    },
   ]);
+
+  const totalPosts = await Post.countDocuments();
+  const totalPages = Math.ceil(totalPosts / perPage);
 
   return res.status(200).json({
     posts,
     totalPages,
     currentPage: page,
     totalPosts,
-    hasNext: page !== totalPages,
+    hasNext: page !== totalPages && posts.length > 0,
     isSuccess: true,
   });
 });
@@ -195,16 +233,15 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
 export const fetchAllPostsByUser = async (req, res) => {
   const { userId } = req.user;
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 6; // Number of posts per page
+  const limit = parseInt(req.query.limit) || 3; // Number of posts per page
   const totalPosts = await Post.countDocuments({ userId });
-  const totalPages = Math.ceil(totalPosts / limit);
 
   const skip = (page - 1) * limit;
 
   const paginationObject = {
     totalPosts,
     skip,
-    hasNextPage: page * limit < totalPosts,
+    hasNext: page * limit < totalPosts,
     totalPages: Math.ceil(totalPosts / limit),
     currentPage: parseInt(page),
   };
@@ -235,7 +272,7 @@ export const fetchAllPostsByUser = async (req, res) => {
             $project: {
               username: 1,
               name: 1,
-              profilePicture: 1,
+              avatar: 1,
             },
           },
         ],
@@ -262,9 +299,7 @@ export const fetchAllPostsByUser = async (req, res) => {
 
   const p = await Post.aggregate([...postCommonAggregation(req)]);
 
-  return res
-    .status(200)
-    .json({ posts, p: p, isSuccess: true, ...paginationObject });
+  return res.status(200).json({ posts, isSuccess: true, ...paginationObject });
 };
 
 export const fetchAllPostsByUserId = asyncHandler(async (req, res) => {
@@ -285,13 +320,13 @@ export const fetchAllPostsByUserId = asyncHandler(async (req, res) => {
     },
   ]);
 
-  const totalPosts = allPosts[0].totalPosts;
+  const totalPosts = allPosts[0]?.totalPosts;
   const skip = (page - 1) * limit;
 
   const paginationObject = {
     totalPosts,
     skip,
-    hasNextPage: page * limit < totalPosts,
+    hasNext: page * limit < totalPosts,
     totalPages: Math.ceil(totalPosts / limit),
     currentPage: parseInt(page),
   };
@@ -322,7 +357,7 @@ export const fetchAllPostsByUserId = asyncHandler(async (req, res) => {
             $project: {
               username: 1,
               name: 1,
-              profilePicture: 1,
+              avatar: 1,
             },
           },
         ],
@@ -397,7 +432,7 @@ export const getSinglePost = asyncHandler(async (req, res) => {
             $project: {
               username: 1,
               name: 1,
-              profilePicture: 1,
+              avatar: 1,
             },
           },
         ],
@@ -523,7 +558,7 @@ export const getAllPosts = async (req, res) => {
           userId: "$user._id",
           username: "$user.username",
           name: "$user.name",
-          profilePicture: "$user.profilePicture",
+          avatar: "$user.avatar",
           updatedAt: 1,
           imageUrl: 1,
           caption: 1,

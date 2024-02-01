@@ -56,6 +56,7 @@ const unlike = asyncHandler(async (req, res) => {
 });
 
 const fetchlikes = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
   const { postId } = req.params;
 
   const likes = await Like.aggregate([
@@ -72,12 +73,54 @@ const fetchlikes = asyncHandler(async (req, res) => {
         as: "user",
         pipeline: [
           {
+            $addFields: {
+              isCurrentUser: {
+                $eq: ["$_id", new mongoose.Types.ObjectId(userId)],
+              },
+            },
+          },
+          {
+            $lookup: {
+              from: "follows",
+              localField: "_id",
+              foreignField: "followeeId",
+              as: "follow",
+              pipeline: [
+                {
+                  $match: {
+                    followerId: new mongoose.Types.ObjectId(userId),
+                  },
+                },
+              ],
+            },
+          },
+          {
+            $addFields: {
+              isFollow: {
+                $cond: {
+                  if: {
+                    $gte: [
+                      {
+                        $size: "$follow",
+                      },
+                      1,
+                    ],
+                  },
+                  then: true,
+                  else: false,
+                },
+              },
+            },
+          },
+          {
             $project: {
               _id: 1,
               username: 1,
-              profilePicture: 1,
+              avatar: 1,
               name: 1,
               likeId: 1,
+              isFollow: 1,
+              isCurrentUser: 1,
             },
           },
         ],
@@ -88,12 +131,28 @@ const fetchlikes = asyncHandler(async (req, res) => {
         user: {
           $first: "$user",
         },
-        
+      },
+    },
+    {
+      $sort: {
+        "user.isCurrentUser": -1,
+        "user.isFollow": -1,
+        // Add other sort criteria if needed
       },
     },
     { $replaceRoot: { newRoot: "$user" } },
   ]);
+
   return res.status(200).json({ likes });
 });
 
-export { like, unlike, fetchlikes };
+
+
+//admine 
+
+const fetchAllLikes = asyncHandler(async(req, res)=>{
+  const likes = await Like.find().populate('likedBy')
+  return res.status(200).json({ likes });
+})
+
+export { like, unlike, fetchlikes, fetchAllLikes };

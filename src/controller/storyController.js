@@ -46,7 +46,7 @@ export const getstories = asyncHandler(async (req, res) => {
   const stories = await UserStories.find()
     .populate({
       path: "user",
-      select: "username profilePicture", // Specify the fields you want to include for the user
+      select: "username avatar", // Specify the fields you want to include for the user
     })
     .populate("stories")
     .lean();

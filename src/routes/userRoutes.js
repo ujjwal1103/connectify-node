@@ -25,19 +25,15 @@ import {
 import { upload, validateUsername, verifyToken } from "../middleware/index.js";
 const router = express.Router();
 
-// G{}ye
-
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.get("/user", verifyToken, getUser);
 router.get("/user/:username", verifyToken, validateUsername, getUserByUsername);
 router.get("/users", verifyToken, getUsers);
 router.get("/friends", verifyToken, getFriends);
-// router.put("/sendFriendReq", verifyToken, sendFriendRequest);
-// router.put("/unfollow/:friendId", verifyToken, unfollowUser);
 router.put("/user/privateAccount", verifyToken, makeAccountPrivate);
 router.delete("/user", verifyToken, deleteUser);
-router.put("/user/edit", verifyToken, upload.single("image"), editUser);
+router.put("/user/edit", verifyToken, upload.single("avatar"), editUser);
 router.get("/users/search", verifyToken, searchUsers);
 router.get("/oauth/google", googleAuthentication);
 router.get("/authenticate", googleAuthenticate);

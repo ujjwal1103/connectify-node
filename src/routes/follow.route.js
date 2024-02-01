@@ -4,6 +4,7 @@ import {
   followUser,
   unfollowUser,
   getFollowers,
+  getAllFollowers,
   getFollowing,
 } from "../controller/follow.controller.js";
 
@@ -13,5 +14,7 @@ router.post("/follow/:followeeId", verifyToken, followUser);
 router.delete("/unfollow/:followeeId", verifyToken, unfollowUser);
 router.get("/followers/:userId", verifyToken, getFollowers);
 router.get("/following/:userId", verifyToken, getFollowing);
+/// admine routes
+router.get("/admin/follows", getAllFollowers);
 
 export default router;
