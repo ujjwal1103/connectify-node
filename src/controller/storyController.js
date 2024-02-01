@@ -13,7 +13,7 @@ export const createStory = asyncHandler(async (req, res) => {
     throw new ApiError(400, `story creation failed`);
   }
   const userStories = await UserStories.findOne({ user: userId }).lean();
-  console.log(userStories);
+  
   if (userStories) {
     const updatedUserStories = await UserStories.findOneAndUpdate(
       { user: userId },
@@ -46,7 +46,7 @@ export const getstories = asyncHandler(async (req, res) => {
   const stories = await UserStories.find()
     .populate({
       path: "user",
-      select: "username profilePicture", // Specify the fields you want to include for the user
+      select: "username avatar", // Specify the fields you want to include for the user
     })
     .populate("stories")
     .lean();

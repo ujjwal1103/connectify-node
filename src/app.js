@@ -12,16 +12,47 @@ import {
   storyRouter,
   userRouter,
   followRouter,
+  likeRouter,
+  uploadRouter
 } from "./routes/index.js";
 import { ApiError } from "./utils/ApiError.js";
 import asyncHandler from "./utils/asyncHandler.js";
 import { verifyToken } from "./middleware/index.js";
+import { Server } from "socket.io";
+import rateLimit from "express-rate-limit";
 
 dotenv.config({
   path: "./.env",
 });
 const app = express();
 const httpServer = createServer(app);
+export const io = new Server(httpServer, {
+  cors: {
+    origin: "*",
+  },
+});
+
+
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, 
+  max: 5000, 
+  standardHeaders: true, 
+  legacyHeaders: false, 
+  keyGenerator: (req, _) => {
+    return req.clientIp; 
+  },
+  handler: (_, __, ___, options) => {
+    throw new ApiError(
+      options.statusCode || 500,
+      `There are too many requests. You are only allowed ${
+        options.max
+      } requests per ${options.windowMs / 60000} minutes`
+    );
+  },
+});
+
+
+app.use(limiter);
 
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
@@ -38,6 +69,8 @@ app.use("/api", commentRouter);
 app.use("/api", chatRouter);
 app.use("/api", messageRouter);
 app.use("/api", followRouter);
+app.use("/api", likeRouter);
+app.use("/api", uploadRouter);
 
 app.get(
   "/api/validetoken",

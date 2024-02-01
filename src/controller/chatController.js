@@ -29,7 +29,7 @@ export const createChat = asyncHandler(async (req, res) => {
   })
     .populate({
       path: "members lastMessage",
-      select: "name username _id profilePicture text from",
+      select: "name username _id avatar text from",
     })
     .lean();
 
@@ -58,7 +58,7 @@ export const createChat = asyncHandler(async (req, res) => {
   const chat = await Chat.findById(savedChat._id)
     .populate({
       path: "members lastMessage",
-      select: "name username _id profilePicture text from",
+      select: "name username _id avatar text from",
     })
     .lean();
   const friend = await chat.members.find(
@@ -77,7 +77,7 @@ export const getAllChats = async (req, res) => {
     const chats = await Chat.find({ members: { $in: [userId] } })
       .populate({
         path: "members lastMessage",
-        select: "name username _id profilePicture text from",
+        select: "name username _id avatar text from",
       })
       .select("-__v")
       .sort({ updatedAt: -1 })

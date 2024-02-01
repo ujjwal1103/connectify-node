@@ -12,18 +12,16 @@ const postSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
-    imageUrl:[ {
-      type: String,
-      required: true,
-    }],
+    imageUrl: [
+      {
+        type: String,
+        required: true,
+      },
+    ],
     userId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
-    },
-    likedBy: {
-      type: [mongoose.Schema.Types.ObjectId],
-      ref: "User",
     },
   },
   { timestamps: true }

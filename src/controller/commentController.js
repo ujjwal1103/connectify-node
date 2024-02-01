@@ -8,7 +8,7 @@ export const getComments = async (req, res) => {
       .sort({
         updatedAt: -1,
       })
-      .populate("from", "username profilePicture")
+      .populate("from", "username avatar")
       .lean();
 
     const formattedComments = comments.map((comment) => {
@@ -33,18 +33,19 @@ export const getComments = async (req, res) => {
 // add new notifications
 export const addComment = async (req, res) => {
   const { userId: from } = req.user;
-  const { comment, post } = req.body;
+  const { comment, post, mentions } = req.body;
 
   try {
     const newComment = new Comment({
       from,
       comment,
       post,
+      mentions,
     });
     const createdComment = await newComment.save();
 
     const c = await Comment.findOne(createdComment._id)
-      .populate("from", "username profilePicture")
+      .populate("from", "username avatar")
       .lean();
 
     return res.status(201).json({

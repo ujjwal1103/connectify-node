@@ -38,9 +38,11 @@ export const unfollowUser = asyncHandler(async (req, res) => {
 
 export const getFollowers = asyncHandler(async (req, res) => {
   const { userId } = req.params;
-  const { userId: currUserId } = req.params;
+  const { userId: currUserId } = req.user;
 
   const sameUser = userId === currUserId;
+
+  console.log(sameUser);
 
   const followers = await Follow.aggregate([
     {
@@ -59,7 +61,7 @@ export const getFollowers = asyncHandler(async (req, res) => {
             $project: {
               _id: 1,
               username: 1,
-              profilePicture: 1,
+              avatar: 1,
             },
           },
         ],
@@ -69,17 +71,14 @@ export const getFollowers = asyncHandler(async (req, res) => {
       $unwind: "$follower",
     },
     {
+      $addFields: {},
+    },
+    {
       $addFields: {
         isFollow: {
           $eq: [new mongoose.Types.ObjectId(currUserId), "$followeeId"],
         },
-      },
-    },
-    {
-      $addFields: {
-        canRemove: {
-          $eq: [sameUser, "$isFollow"],
-        },
+        canRemove: sameUser,
       },
     },
 
@@ -87,7 +86,7 @@ export const getFollowers = asyncHandler(async (req, res) => {
       $project: {
         _id: "$follower._id",
         username: "$follower.username",
-        profilePicture: "$follower.profilePicture",
+        avatar: "$follower.avatar",
         isFollow: "$isFollow",
         canRemove: "$canRemove",
       },
@@ -98,8 +97,10 @@ export const getFollowers = asyncHandler(async (req, res) => {
 });
 
 export const getFollowing = asyncHandler(async (req, res) => {
+  const { userId: currentUserId } = req.user;
   const { userId } = req.params; // Include username in the request params
   const { username } = req.query;
+  console.log("inside");
   const matchStage = {
     $match: {
       followerId: new mongoose.Types.ObjectId(userId),
@@ -140,17 +141,46 @@ export const getFollowing = asyncHandler(async (req, res) => {
           as: "following",
           pipeline: [
             {
-              $addFields: {
-                isFollow: true,
+              $lookup: {
+                from: "follows",
+                localField: "_id",
+                foreignField: "followeeId",
+                as: "follow",
+                pipeline: [
+                  {
+                    $match: {
+                      followerId: new mongoose.Types.ObjectId(currentUserId),
+                    },
+                  },
+                ],
               },
             },
+            {
+              $addFields: {
+                isFollow: {
+                  $cond: {
+                    if: {
+                      $gte: [
+                        {
+                          $size: "$follow",
+                        },
+                        1,
+                      ],
+                    },
+                    then: true,
+                    else: false,
+                  },
+                },
+              },
+            },
+
             {
               $project: {
                 _id: 1,
                 username: 1,
-                profilePicture: 1,
+                avatar: 1,
                 isFollow: 1,
-                isActive: 1,
+                follow: 1,
               },
             },
           ],
@@ -159,16 +189,30 @@ export const getFollowing = asyncHandler(async (req, res) => {
 
   const followings = await Follow.aggregate([
     matchStage,
-    usernameMatchStage, // Include the username match stage
+    usernameMatchStage,
     {
-      $unwind: "$following", // Unwind the 'following' array
+      $unwind: "$following",
     },
     {
       $project: {
         _id: "$following._id",
         username: "$following.username",
-        profilePicture: "$following.profilePicture",
+        avatar: "$following.avatar",
         isFollow: "$following.isFollow",
+        follow: "$following.follow",
+      },
+    },
+    {
+      $addFields: {
+        isCurrentUser: {
+          $eq: ["$_id", new mongoose.Types.ObjectId(currentUserId)],
+        },
+      },
+    },
+    {
+      $sort: {
+        isCurrentUser: -1,
+        isFollow: -1,
       },
     },
   ]);
@@ -176,4 +220,9 @@ export const getFollowing = asyncHandler(async (req, res) => {
   // The 'followings' variable now contains the modified data structure.
 
   return res.status(200).json({ isSuccess: true, followings: [...followings] });
+});
+
+export const getAllFollowers = asyncHandler(async (req, res) => {
+  const follows = await Follow.find().populate("followerId followeeId");
+  return res.status(200).json({ follows });
 });

@@ -1,18 +1,37 @@
 import axios from "axios";
 import User from "../models/user.modal.js";
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import QueryString from "qs";
 import asyncHandler from "./../utils/asyncHandler.js";
 import { ApiError } from "./../utils/ApiError.js";
-import { deleteImage, uploadImage } from "../utils/uploadImage.js";
+import { uploadImage } from "../utils/uploadImage.js";
 import mongoose from "mongoose";
-import { getSingleUser } from "../aggregations/user.js";
+
 import { users } from "../userdata.js";
 import Post from "../models/post.modal.js";
 import { Follow } from "../models/follow.model.js";
+import { getObjectId } from "../utils/index.js";
 
-// register a new user to connectify
+const generateAccessAndRefreshTokens = async (userId) => {
+  try {
+    const user = await User.findById(userId);
+
+    const accessToken = user.generateAccessToken();
+    const refreshToken = user.generateRefreshToken();
+
+    // attach refresh token to the user document to avoid refreshing the access token with multiple refresh tokens
+    user.refreshToken = refreshToken;
+
+    await user.save({ validateBeforeSave: false });
+    return { accessToken, refreshToken };
+  } catch (error) {
+    throw new ApiError(
+      500,
+      "Something went wrong while generating the access token"
+    );
+  }
+};
+
 export const registerUser = asyncHandler(async (req, res) => {
   const { username, password, email } = req.body;
   if (
@@ -20,9 +39,15 @@ export const registerUser = asyncHandler(async (req, res) => {
   ) {
     throw new ApiError(400, "All feilds are required");
   }
-  const existingUser = await User.findOne({ username });
+  const existingUser = await User.findOne({
+    $or: [{ username }, { email }],
+  });
+
   if (existingUser) {
-    throw new ApiError(409, `User with ${username} already exists`);
+    throw new ApiError(
+      409,
+      `User with ${username} and ${email} already exists`
+    );
   }
 
   const salt = bcrypt.genSaltSync(10);
@@ -40,7 +65,6 @@ export const registerUser = asyncHandler(async (req, res) => {
   });
 });
 
-// login to connectify
 export const loginUser = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
   const user = await User.findOne({ username })
@@ -51,72 +75,98 @@ export const loginUser = asyncHandler(async (req, res) => {
   }
   const matchPassword = await bcrypt.compare(password, user.password);
   if (!matchPassword) {
-    throw new ApiError(400, "Incorrect username name and password");
+    throw new ApiError(400, "Incorrect username and password");
   }
-  const token = jwt.sign(
-    { userId: user._id, username: user.username },
-    process.env.JWT_SECREATE,
-    { expiresIn: process.env.JWT_EXPIRE }
+
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+    user?._id
   );
   delete user.password;
+  delete user?.refreshToken;
+
+  const options = {
+    httpOnly: true,
+    secure: true,
+  };
 
   return res
     .status(201)
-    .json({ user: { ...user }, isSuccess: true, token: token });
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json({
+      user: { ...user },
+      isSuccess: true,
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+    });
 });
 
-//get info of logged in user
 export const getUser = asyncHandler(async (req, res) => {
   const { userId } = req.user;
 
-  console.log(userId);
+  const Id = getObjectId(userId);
 
-  const user = await User.findOne({ _id: userId }).lean();
+  const user = await User.aggregate([
+    {
+      $match: {
+        _id: Id,
+      },
+    },
+    {
+      $project: {
+        username: 1,
+        name: 1,
+        email: 1,
+        isPrivate: 1,
+        avatar: 1,
+        bio: 1,
+        gender: 1,
+      },
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: "_id",
+        foreignField: "followeeId",
+        as: "followers",
+      },
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: "_id",
+        foreignField: "followerId",
+        as: "following",
+      },
+    },
+    {
+      $lookup: {
+        from: "posts",
+        localField: "_id",
+        foreignField: "userId",
+        as: "posts",
+      },
+    },
+    {
+      $addFields: {
+        followers: {
+          $size: "$followers",
+        },
+        following: {
+          $size: "$following",
+        },
+        posts: {
+          $size: "$posts",
+        },
+      },
+    },
+  ]);
 
-  if (!user) {
-    throw new ApiError(400, "UnAuthorized UserId not found");
+  if (!user[0]) {
+    throw new ApiError(400, "UserId not found");
   }
-
-  const following = await Follow.aggregate([
-    {
-      $match: {
-        followerId: new mongoose.Types.ObjectId(userId),
-      },
-    },
-    {
-      $count: "following",
-    },
-  ]);
-
-  const followers = await Follow.aggregate([
-    {
-      $match: {
-        followeeId: new mongoose.Types.ObjectId(userId),
-      },
-    },
-    {
-      $count: "followers",
-    },
-  ]);
-
-  const posts = await Post.aggregate([
-    {
-      $match: {
-        userId: new mongoose.Types.ObjectId(user?._id),
-      },
-    },
-    {
-      $count: "posts",
-    },
-  ]);
-
   return res.status(200).json({
-    user: {
-      ...user,
-      followers: followers[0]?.followers || 0,
-      following: following[0]?.following || 0,
-      posts: posts[0]?.posts || 0,
-    },
+    user: user[0],
     isSuccess: true,
   });
 });
@@ -125,130 +175,144 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
   const { username } = req.params;
   const { userId } = req.user;
 
-  const user = await User.findOne({ username })
-    .select("-password -receivedfriendRequest -sentfriendRequest")
-    .lean();
+  const Id = getObjectId(userId);
 
-  if (!user) {
-    throw new ApiError(400, "UnAuthorized UserId not found");
+  const user = await User.aggregate([
+    {
+      $match: {
+        username: username,
+      },
+    },
+    {
+      $project: {
+        username: 1,
+        name: 1,
+        email: 1,
+        isPrivate: 1,
+        avatar: 1,
+      },
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: "_id",
+        foreignField: "followeeId",
+        as: "followers",
+      },
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: "_id",
+        foreignField: "followerId",
+        as: "following",
+      },
+    },
+    {
+      $lookup: {
+        from: "posts",
+        localField: "_id",
+        foreignField: "userId",
+        as: "posts",
+      },
+    },
+    {
+      $addFields: {
+        followers: {
+          $size: "$followers",
+        },
+        following: {
+          $size: "$following",
+        },
+        posts: {
+          $size: "$posts",
+        },
+        isFollow: {
+          $in: [Id, "$followers.followerId"],
+        },
+        isIFollow: {
+          $in: [Id, "$following.followeeId"],
+        },
+      },
+    },
+  ]);
+
+  if (!user[0]) {
+    throw new ApiError(400, "UserId not found");
   }
-
-  const following = await Follow.aggregate([
-    {
-      $match: {
-        followerId: new mongoose.Types.ObjectId(user?._id),
-      },
-    },
-    {
-      $count: "following",
-    },
-  ]);
-
-  const followers = await Follow.aggregate([
-    {
-      $match: {
-        followeeId: new mongoose.Types.ObjectId(user?._id),
-      },
-    },
-    {
-      $count: "followers",
-    },
-  ]);
-
-  const posts = await Post.aggregate([
-    {
-      $match: {
-        userId: new mongoose.Types.ObjectId(user?._id),
-      },
-    },
-    {
-      $count: "posts",
-    },
-  ]);
-
-  const isFollow = await Follow.findOne({
-    followerId: userId,
-    followeeId: user?._id,
-  });
-
   return res.status(200).json({
-    user: {
-      ...user,
-      followers: followers[0]?.followers || 0,
-      following: following[0]?.following || 0,
-      posts: posts[0]?.posts || 0,
-      isFollow: !!isFollow,
-    },
+    user: user[0],
     isSuccess: true,
   });
 });
 
-export const getUsers = async (req, res) => {
+export const getUsers = asyncHandler(async (req, res) => {
   const { userId } = req.user;
-  try {
-    const currentUser = await User.findOne({ _id: userId });
-    const followingList = currentUser.following;
-    const users = await User.find({
-      _id: { $ne: userId, $nin: followingList },
-    })
-      .select("_id username name profilePicture")
-      .limit(5);
+  const users = await User.aggregate([
+    {
+      $match: {
+        _id: { $ne: new mongoose.Types.ObjectId(userId) },
+      },
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: "_id",
+        foreignField: "followeeId",
+        as: "followers",
+      },
+    },
+    {
+      $match: {
+        followers: {
+          $not: {
+            $elemMatch: { followerId: new mongoose.Types.ObjectId(userId) },
+          },
+        },
+      },
+    },
+    {
+      $limit: 5,
+    },
+  ]);
 
-    return res.status(200).json({
-      users: users,
-      isSuccess: true,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      error: "Internal server Error",
-      message: "Something went wrong",
-      isSuccess: false,
-    });
-  }
-};
+  return res.status(200).json({
+    users: users,
+    isSuccess: true,
+  });
+});
 
-export const getFriends = async (req, res) => {
+export const getFriends = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const { page = 1, pageSize = 10 } = req.query;
-  try {
-    const skip = (page - 1) * pageSize;
+  const skip = (page - 1) * pageSize;
+  const currentUser = await User.findOne({ _id: userId });
 
-    const currentUser = await User.findOne({ _id: userId });
+  const followingList = currentUser?.following;
+  const followersList = currentUser?.followers;
 
-    const followingList = currentUser.following;
-    const followersList = currentUser.followers;
+  const connectedUsers = [...followingList, ...followersList, userId];
 
-    // Merge followers and following list to get all connected users
-    const connectedUsers = [...followingList, ...followersList, userId];
+  const users = await User.find({
+    _id: { $ne: userId, $in: connectedUsers },
+  })
+    .skip(skip)
+    .limit(Number(pageSize))
+    .select("-password -__v");
 
-    const users = await User.find({
-      _id: { $ne: userId, $in: connectedUsers },
-    })
-      .skip(skip)
-      .limit(Number(pageSize))
-      .select("-password -__v");
+  const totalRecords = await User.countDocuments({
+    _id: { $ne: userId, $in: connectedUsers },
+  });
 
-    const totalRecords = await User.countDocuments({
-      _id: { $ne: userId, $in: connectedUsers },
-    });
-
-    return res.status(200).json({
-      users: users,
-      isSuccess: true,
-      totalRecords,
-      pageSize: Number(pageSize),
-      currentPage: Number(page),
-      totalPages: Math.ceil(totalRecords / pageSize),
-    });
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      error: "Internal server Error",
-      message: "Something went wrong",
-      isSuccess: false,
-    });
-  }
-};
+  return res.status(200).json({
+    users: users,
+    isSuccess: true,
+    totalRecords,
+    pageSize: Number(pageSize),
+    currentPage: Number(page),
+    totalPages: Math.ceil(totalRecords / pageSize),
+  });
+});
 
 export const deleteUser = async (req, res) => {
   const { userId } = req.user;
@@ -279,76 +343,59 @@ export const deleteUser = async (req, res) => {
   }
 };
 
-export const editUser = async (req, res) => {
+export const editUser = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const { username, bio, name, gender } = req.body;
-  try {
-    const user = await User.findById(userId);
-    let url;
-    if (user) {
-      if (req.file) {
-        url = await uploadImage(req.file.originalname, "profilePics");
-      }
-      const result = await User.findByIdAndUpdate(
-        userId,
-        {
-          username,
-          bio,
-          name,
-          // profilePicture:process.env.IMAGE_PATH + req.file.originalname,
-          profilePicture: url,
-          gender,
-        },
-        { new: true }
-      );
-      return res.status(200).json({
-        user: result,
-        isSuccess: true,
-        message: "User updated successfully",
-      });
+
+  const user = await User.findById(userId);
+
+  if (!user) {
+    throw ApiError(400, "User not found");
+  }
+  let avatar;
+  if (user) {
+    if (req.file) {
+      avatar = await uploadImage(req.file.originalname, "profilePics");
     }
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      isSuccess: false,
-      error: error.name || error,
-      message: error.message || "Something went wrong",
+    await User.findByIdAndUpdate(
+      userId,
+      {
+        username,
+        bio,
+        name,
+        avatar,
+        gender,
+      },
+      { new: true }
+    );
+    return res.status(200).json({
+      isSuccess: true,
+      message: "User updated successfully",
     });
   }
-};
+});
 
-export const searchUsers = async (req, res) => {
+export const searchUsers = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const { query } = req.query;
 
-  try {
-    if (query) {
-      const users = await User.find({
-        _id: { $ne: userId },
-        $or: [
-          { name: { $regex: query, $options: "i" } }, // Case-insensitive search for name
-          { username: { $regex: query, $options: "i" } }, // Case-insensitive search for username
-        ],
-      }).select("_id username profilePicture");
-
-      return res.status(200).json({
-        users: users,
-        isSuccess: true,
-      });
-    }
-    return res.status(200).json({
-      users: [],
-      isSuccess: true,
-    });
-  } catch (error) {
-    console.log(error);
-    return res.status(500).json({
-      error: "Internal server Error",
-      message: "Something went wrong",
-      isSuccess: false,
-    });
+  if (!query && query !== "") {
+    throw new ApiError(400, "query param is missing");
   }
-};
+
+  const users = await User.find({
+    _id: { $ne: userId },
+    $or: [
+      { name: { $regex: query, $options: "i" } },
+      { username: { $regex: query, $options: "i" } },
+    ],
+  }).select("_id username avatar");
+
+  return res.status(200).json({
+    users: users,
+    isSuccess: true,
+  });
+});
 
 const getGoogleAuthToken = async (code) => {
   const url = "https://oauth2.googleapis.com/token";
@@ -436,18 +483,17 @@ export const makeAccountPrivate = asyncHandler(async (req, res) => {
   return res.status(200).json({ isSuccess: !!updatedUser });
 });
 
-export const createUsers = asyncHandler(async (req, res) => {
+export const createUsers = asyncHandler(async (_, res) => {
   const u = users.forEach(async (user) => {
     const salt = bcrypt.genSaltSync(10);
     const hash = bcrypt.hashSync(user.username, salt);
     await User.create({
       email: user.email,
       password: hash,
+      name: user.name,
       username: user.username,
     });
   });
-
-  console.log(u);
 
   return res.status(201).json({ message: "Users created successfully" });
 });
@@ -479,6 +525,7 @@ export const getAllUsers = asyncHandler(async (req, res) => {
     totalPages: totalPages,
   });
 });
+
 export const getAllUsersIds = asyncHandler(async (req, res) => {
   const page = req.query.page || 1;
   const size = 10;
@@ -537,21 +584,16 @@ export const createNewUser = asyncHandler(async (req, res) => {
     totalPages: totalPages,
   });
 });
+
 export const editNewUser = asyncHandler(async (req, res) => {
   const { userId } = req.params;
+  console.log(req.body);
 
   const user = await User.findByIdAndUpdate(
     userId,
     {
       $set: {
-        username: req?.body?.username,
-        name: req?.body?.name,
-        email: req?.body?.email,
-        profilePicture: req?.body?.profilePicture,
-        mobile: req.body?.mobile,
-        gender: req?.body?.gender,
-        isPrivate: req?.body?.isPrivate,
-        isActive: req?.body?.isActive,
+        ...req.body,
       },
     },
     { new: true }
@@ -589,21 +631,25 @@ export const getUserByUsernameA = asyncHandler(async (req, res) => {
 export const deleteUsersByIds = asyncHandler(async (req, res) => {
   const ids = req.body;
 
-  console.log(ids);
-
   const deletedUsers = await User.deleteMany({ _id: { $in: ids } });
 
   const deletedPosts = await Post.deleteMany({ userId: { $in: ids } });
 
   const deletedFollows = await Follow.deleteMany({ followerId: { $in: ids } });
 
+  const deletedFollowings = await Follow.deleteMany({
+    followeeId: { $in: ids },
+  });
+
   return res.status(200).json({
     deletedUsers,
     deletedPosts,
     deletedFollows,
+    deletedFollowings,
     message: "users deleted successfully",
   });
 });
+
 export const deleteUserById = asyncHandler(async (req, res) => {
   const id = req.body.id;
 
@@ -613,10 +659,14 @@ export const deleteUserById = asyncHandler(async (req, res) => {
 
   const deletedFollow = await Follow.deleteOne({ followerId: id });
 
+  const deletedFollowing = await Follow.deleteOne({ followeeId: id });
+
   return res.status(200).json({
     deletedUser,
     deletedPost,
     deletedFollow,
+    deletedFollowing,
     message: "users deleted successfully",
   });
 });
+
