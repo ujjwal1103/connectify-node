@@ -99,8 +99,11 @@ export const getFollowers = asyncHandler(async (req, res) => {
 export const getFollowing = asyncHandler(async (req, res) => {
   const { userId: currentUserId } = req.user;
   const { userId } = req.params; // Include username in the request params
-  const { username } = req.query;
-  console.log("inside");
+  const { username, page = 1, pageSize = 10 } = req.query;
+  console.log(page)
+  const skipCount = (page - 1) * pageSize;
+
+  console.log(skipCount)
   const matchStage = {
     $match: {
       followerId: new mongoose.Types.ObjectId(userId),
@@ -178,6 +181,7 @@ export const getFollowing = asyncHandler(async (req, res) => {
               $project: {
                 _id: 1,
                 username: 1,
+                name: 1,
                 avatar: 1,
                 isFollow: 1,
                 follow: 1,
@@ -197,6 +201,7 @@ export const getFollowing = asyncHandler(async (req, res) => {
       $project: {
         _id: "$following._id",
         username: "$following.username",
+        name: "$following.name",
         avatar: "$following.avatar",
         isFollow: "$following.isFollow",
         follow: "$following.follow",
@@ -215,9 +220,13 @@ export const getFollowing = asyncHandler(async (req, res) => {
         isFollow: -1,
       },
     },
+    {
+      $skip: skipCount,
+    },
+    {
+      $limit: pageSize,
+    },
   ]);
-
-  // The 'followings' variable now contains the modified data structure.
 
   return res.status(200).json({ isSuccess: true, followings: [...followings] });
 });

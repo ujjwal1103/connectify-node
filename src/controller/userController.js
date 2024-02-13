@@ -74,7 +74,7 @@ export const loginUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, `user with ${username} not found`);
   }
   const matchPassword = await bcrypt.compare(password, user.password);
-  if (!matchPassword) {
+    if (!matchPassword) {
     throw new ApiError(400, "Incorrect username and password");
   }
 
@@ -248,6 +248,11 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
 
 export const getUsers = asyncHandler(async (req, res) => {
   const { userId } = req.user;
+  const page = req.query.page || 1; // Default to page 1 if not provided
+  const limit = +req.query.limit || 10; // Default limit to 10 if not provided
+
+  const skip = (page - 1) * limit;
+
   const users = await User.aggregate([
     {
       $match: {
@@ -272,15 +277,32 @@ export const getUsers = asyncHandler(async (req, res) => {
       },
     },
     {
-      $limit: 5,
+      $skip: skip,
+    },
+    {
+      $limit: limit,
     },
   ]);
 
+  const totalCount = await User.countDocuments({
+    _id: { $ne: new mongoose.Types.ObjectId(userId) },
+  });
+
+  const totalPages = Math.ceil(totalCount / limit);
+  const hasMore = page < totalPages;
   return res.status(200).json({
     users: users,
+    pagination: {
+      currentPage: page,
+      totalPages: totalPages,
+      totalUsers: totalCount,
+      perPage: limit,
+      hasMore,
+    },
     isSuccess: true,
   });
 });
+
 
 export const getFriends = asyncHandler(async (req, res) => {
   const { userId } = req.user;
