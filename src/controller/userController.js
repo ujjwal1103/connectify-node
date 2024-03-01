@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 import QueryString from "qs";
 import asyncHandler from "./../utils/asyncHandler.js";
 import { ApiError } from "./../utils/ApiError.js";
-import { uploadImage } from "../utils/uploadImage.js";
+import { deleteImage, uploadImage } from "../utils/uploadImage.js";
 import mongoose from "mongoose";
 
 import { users } from "../userdata.js";
@@ -74,7 +74,7 @@ export const loginUser = asyncHandler(async (req, res) => {
     throw new ApiError(400, `user with ${username} not found`);
   }
   const matchPassword = await bcrypt.compare(password, user.password);
-    if (!matchPassword) {
+  if (!matchPassword) {
     throw new ApiError(400, "Incorrect username and password");
   }
 
@@ -303,7 +303,6 @@ export const getUsers = asyncHandler(async (req, res) => {
   });
 });
 
-
 export const getFriends = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const { page = 1, pageSize = 10 } = req.query;
@@ -374,9 +373,11 @@ export const editUser = asyncHandler(async (req, res) => {
   if (!user) {
     throw ApiError(400, "User not found");
   }
-  let avatar;
+  let avatar = null;
+  console.log(avatar, "avatar");
   if (user) {
     if (req.file) {
+      console.log(req.file.originalname);
       avatar = await uploadImage(req.file.originalname, "profilePics");
     }
     await User.findByIdAndUpdate(
@@ -390,8 +391,14 @@ export const editUser = asyncHandler(async (req, res) => {
       },
       { new: true }
     );
+
+    if (avatar === null && !req.file) {
+      const result = await deleteImage(avatar);
+      console.log(result, "deletion result");
+    }
     return res.status(200).json({
       isSuccess: true,
+      updatedData: { username, bio, avatar, name, gender },
       message: "User updated successfully",
     });
   }
@@ -430,7 +437,6 @@ const getGoogleAuthToken = async (code) => {
     grant_type: "authorization_code",
   };
 
-  console.log(values);
   try {
     const res = await axios.post(url, QueryString.stringify(values), {
       headers: {
@@ -691,4 +697,3 @@ export const deleteUserById = asyncHandler(async (req, res) => {
     message: "users deleted successfully",
   });
 });
-

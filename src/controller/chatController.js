@@ -3,6 +3,7 @@ import Chat from "../models/chat.modal.js";
 import User from "../models/user.modal.js";
 import asyncHandler from "./../utils/asyncHandler.js";
 import { ApiError } from "./../utils/ApiError.js";
+import mongoose from "mongoose";
 
 export const createChat = asyncHandler(async (req, res) => {
   const {
@@ -74,34 +75,84 @@ export const createChat = asyncHandler(async (req, res) => {
 export const getAllChats = async (req, res) => {
   const { userId } = req.user;
   try {
-    const chats = await Chat.find({ members: { $in: [userId] } })
-      .populate({
-        path: "members lastMessage",
-        select: "name username _id avatar text from",
-      })
-      .select("-__v")
-      .sort({ updatedAt: -1 })
-      .lean();
+    const aggrigatedChats = await Chat.aggregate([
+      {
+        $match: {
+          members: { $in: [new mongoose.Types.ObjectId(userId)] },
+        },
+      },
+      {
+        $lookup: {
+          from: "users", // Assuming "users" is the collection for user details
+          localField: "members",
+          foreignField: "_id",
+          as: "members",
+          pipeline: [
+            {
+              $project: {
+                username: 1,
+                name: 1,
+                avatar: 1,
+              },
+            },
+          ],
+        },
+      },
+      {
+        $lookup: {
+          from: "messages", // Assuming "users" is the collection for user details
+          localField: "lastMessage",
+          foreignField: "_id",
+          as: "lastMessage",
+          pipeline: [
+            {
+              $project: {
+                chat: 0,
+                
+                
+              },
+            },
+          ],
+        },
+      },
+      {
+        $addFields: {
+          friend: {
+            $arrayElemAt: [
+              {
+                $filter: {
+                  input: "$members",
+                  cond: {
+                    $ne: ["$$this._id", new mongoose.Types.ObjectId(userId)],
+                  },
+                },
+              },
+              0,
+            ],
+          },
+          lastMessage: {
+            $first: '$lastMessage'
+          }
+        },
+      },
+      {
+        $project: {
+          members: 0, 
+          __v:0  // Remove the membersDetails field after adding the friend field
+        },
+      },
+      {
+        $sort: { updatedAt: -1 },
+      },
+    ]);
 
-    const modifiedChats = chats.map((chat) => {
-      // Find the friend who is not the current user
-      const { members, ...other } = chat;
-      const friend = members.find((member) => member._id.toString() !== userId);
-
-      // Create a new chat object with the additional "friend" field
-      const modifiedChat = {
-        ...other, // Convert the Mongoose document to a plain JavaScript object
-        friend: friend,
-      };
-
-      return modifiedChat;
-    });
 
     return res.status(201).json({
       isSuccess: true,
-      chats: modifiedChats,
+      chats: aggrigatedChats,
     });
   } catch (error) {
+    console.log(error);
     return res.status(500).json({
       error: error.message,
       isSuccess: false,

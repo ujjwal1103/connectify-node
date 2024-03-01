@@ -39,6 +39,7 @@ const unlike = asyncHandler(async (req, res) => {
   const newLike = {
     likedBy: userId,
   };
+  
   if (!commentId && postId) {
     newLike.postId = postId;
   }

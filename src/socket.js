@@ -31,7 +31,7 @@ export const runSocket = () => {
     io.on("connection", (socket) => {
       socket.on("addUser", (user) => {
         addOrUpdateUser(user, socket);
-        socket.emit("allusers", Array.from(users));
+        io.emit("allusers", Array.from(users));
         socket.on("Notification", (notify) => {
           if (notify) {
             const user = findUser(notify.to);
@@ -44,7 +44,7 @@ export const runSocket = () => {
 
       socket.on("disconnect", () => {
         deleteUser(socket.id);
-        socket.broadcast.emit("allusers", Array.from(users));
+        io.emit("allusers", Array.from(users));
       });
     });
   } catch (error) {

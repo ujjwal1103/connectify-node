@@ -10,6 +10,6 @@ export const uploadImageToFirebase = asyncHandler(async (req, res) => {
 
 export const deleteImageFromStorage = asyncHandler(async (req, res) => {
   const imageUrl = req.body;
-
+  const result = deleteImage(image)
   return res.status(200).json({ message: "Image Deleted Successfully" });
 });

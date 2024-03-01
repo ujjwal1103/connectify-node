@@ -1,102 +1,102 @@
 export const users = [
   {
-    "username": "john_doe",
-    "name": "John Doe",
-    "email": "john.doe@example.com"
+    "name": "Rohit Sharma",
+    "username": "rohit_sharma",
+    "email": "rohit@gmail.com"
   },
   {
-    "username": "jane_smith",
-    "name": "Jane Smith",
-    "email": "jane.smith@example.com"
+    "name": "Virat Kohli",
+    "username": "virat_kohli",
+    "email": "virat@gmail.com"
   },
   {
-    "username": "alex_miller",
-    "name": "Alex Miller",
-    "email": "alex.miller@example.com"
+    "name": "Jasprit Bumrah",
+    "username": "jasprit_bumrah",
+    "email": "jasprit@gmail.com"
   },
   {
-    "username": "emily_jones",
-    "name": "Emily Jones",
-    "email": "emily.jones@example.com"
+    "name": "KL Rahul",
+    "username": "kl_rahul",
+    "email": "kl@gmail.com"
   },
   {
-    "username": "david_clark",
-    "name": "David Clark",
-    "email": "david.clark@example.com"
+    "name": "Ravindra Jadeja",
+    "username": "ravindra_jadeja",
+    "email": "jadeja@gmail.com"
   },
   {
-    "username": "olivia_white",
-    "name": "Olivia White",
-    "email": "olivia.white@example.com"
+    "name": "Shikhar Dhawan",
+    "username": "shikhar_dhawan",
+    "email": "shikhar@gmail.com"
   },
   {
-    "username": "ryan_taylor",
-    "name": "Ryan Taylor",
-    "email": "ryan.taylor@example.com"
+    "name": "Cheteshwar Pujara",
+    "username": "cheteshwar_pujara",
+    "email": "cheteshwar@gmail.com"
   },
   {
-    "username": "sophia_brown",
-    "name": "Sophia Brown",
-    "email": "sophia.brown@example.com"
+    "name": "Hardik Pandya",
+    "username": "hardik_pandya",
+    "email": "hardik@gmail.com"
   },
   {
-    "username": "michael_smith",
-    "name": "Michael Smith",
-    "email": "michael.smith@example.com"
+    "name": "Ajinkya Rahane",
+    "username": "ajinkya_rahane",
+    "email": "ajinkya@gmail.com"
   },
   {
-    "username": "emma_jackson",
-    "name": "Emma Jackson",
-    "email": "emma.jackson@example.com"
+    "name": "Mohammed Shami",
+    "username": "mohammed_shami",
+    "email": "shami@gmail.com"
   },
   {
-    "username": "nathan_hall",
-    "name": "Nathan Hall",
-    "email": "nathan.hall@example.com"
+    "name": "Ishant Sharma",
+    "username": "ishant_sharma",
+    "email": "ishant@gmail.com"
   },
   {
-    "username": "sara_martin",
-    "name": "Sara Martin",
-    "email": "sara.martin@example.com"
+    "name": "Rishabh Pant",
+    "username": "rishabh_pant",
+    "email": "pant@gmail.com"
   },
   {
-    "username": "ryan_anderson",
-    "name": "Ryan Anderson",
-    "email": "ryan.anderson@example.com"
+    "name": "Ravichandran Ashwin",
+    "username": "ashwin",
+    "email": "ashwin@gmail.com"
   },
   {
-    "username": "olivia_carter",
-    "name": "Olivia Carter",
-    "email": "olivia.carter@example.com"
+    "name": "Shubman Gill",
+    "username": "shubman_gill",
+    "email": "shubman@gmail.com"
   },
   {
-    "username": "james_wilson",
-    "name": "James Wilson",
-    "email": "james.wilson@example.com"
+    "name": "Mayank Agarwal",
+    "username": "mayank_agarwal",
+    "email": "mayank@gmail.com"
   },
   {
-    "username": "lily_morris",
-    "name": "Lily Morris",
-    "email": "lily.morris@example.com"
+    "name": "Navdeep Saini",
+    "username": "navdeep_saini",
+    "email": "saini@gmail.com"
   },
   {
-    "username": "daniel_harris",
-    "name": "Daniel Harris",
-    "email": "daniel.harris@example.com"
+    "name": "Washington Sundar",
+    "username": "washington_sundar",
+    "email": "washington@gmail.com"
   },
   {
-    "username": "ella_thompson",
-    "name": "Ella Thompson",
-    "email": "ella.thompson@example.com"
+    "name": "T Natarajan",
+    "username": "t_natarajan",
+    "email": "natarajan@gmail.com"
   },
   {
-    "username": "logan_wright",
-    "name": "Logan Wright",
-    "email": "logan.wright@example.com"
+    "name": "Suryakumar Yadav",
+    "username": "suryakumar_yadav",
+    "email": "suryakumar@gmail.com"
   },
   {
-    "username": "aubrey_watson",
-    "name": "Aubrey Watson",
-    "email": "aubrey.watson@example.com"
+    "name": "Yuzvendra Chahal",
+    "username": "chahal",
+    "email": "chahal@gmail.com"
   }
 ]
