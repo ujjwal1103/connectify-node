@@ -23,6 +23,7 @@ export const deleteImage = async (image) => {
   const storageRef = ref(storage, image);
   try {
     await deleteObject(storageRef);
+    
   } catch (error) {
     console.log(error);
   }

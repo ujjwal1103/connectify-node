@@ -376,30 +376,14 @@ export const editUser = asyncHandler(async (req, res) => {
   if (!user) {
     throw ApiError(400, "User not found");
   }
-  let avatar = null;
-  let avatarSmall = null;
 
   if (user) {
-    if (req.file) {
-      const fileName = req.file.originalname;
-      avatar = await uploadImage(fileName, `profilePics/${user.username}`);
-      if (avatar) {
-        avatarSmall = await resizeImageAndUpload(
-          avatar,
-          fileName,
-          30,
-          `profilePics/${user.username}`
-        );
-      }
-    }
     await User.findByIdAndUpdate(
       userId,
       {
         username,
         bio,
         name,
-        avatar,
-        avatarSmall,
         gender,
       },
       { new: true }
@@ -407,19 +391,69 @@ export const editUser = asyncHandler(async (req, res) => {
 
     return res.status(200).json({
       isSuccess: true,
-      updatedData: { username, bio, avatar, name, gender, avatarSmall },
+      updatedData: { username, bio, name, gender },
       message: "User updated successfully",
     });
   }
 });
 
 export const updateProfilePicture = asyncHandler(async (req, res) => {
-  try {
-    const fileName = resizeImage(req.file.path, req.file.originalname, 30);
-    return res.status(200).json({ fileName });
-  } catch (error) {
-    console.log(error);
-  }
+  const { userId } = req.user;
+
+  if (!req.file) throw new ApiError(400, "Profile Picture is Missing");
+
+  const user = await User.findById(userId);
+  if (!user) throw new ApiError(400, "User not found");
+  const fileName = req.file.originalname;
+  const avatar = await uploadImage(fileName, `profilePics/${user.username}`);
+
+  if (!avatar) throw new ApiError(400, "Failed to upload profile pIcture");
+
+  const avatarSmall = await resizeImageAndUpload(
+    avatar,
+    fileName,
+    30,
+    `profilePics/${user.username}`
+  );
+
+  await deleteImage(user?.avatar);
+  await deleteImage(user?.avatarSmall);
+
+  await User.findByIdAndUpdate(
+    userId,
+    {
+      avatar,
+      avatarSmall,
+    },
+    { new: true }
+  );
+
+  await deleteImage(user?.avatar);
+  await deleteImage(user?.avatarSmall); 
+  
+  return res
+    .status(200)
+    .json({ success: true, avatars: { avatar, avatarSmall } });
+});
+
+export const removeProfilePicture = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
+  const user = await User.findById(userId);
+  if (!user) throw new ApiError(400, "User not found");
+
+  await deleteImage(user?.avatar);
+  await deleteImage(user?.avatarSmall);
+
+  await User.findByIdAndUpdate(
+    userId,
+    {
+      avatar: null,
+      avatarSmall: null,
+    },
+    { new: true }
+  );
+
+  return res.status(200).json({ isSuccess: true });
 });
 
 export const searchUsers = asyncHandler(async (req, res) => {
