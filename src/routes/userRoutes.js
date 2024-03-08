@@ -21,10 +21,10 @@ import {
   deleteUsersByIds,
   deleteUserById,
   getAllUsersIds,
+  updateProfilePicture,
 } from "../controller/userController.js";
 import { upload, validateUsername, verifyToken } from "../middleware/index.js";
 const router = express.Router();
-
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.get("/user", verifyToken, getUser);
@@ -38,9 +38,9 @@ router.get("/users/search", verifyToken, searchUsers);
 router.get("/oauth/google", googleAuthentication);
 router.get("/authenticate", googleAuthenticate);
 router.get("/createUsers", createUsers);
+router.patch("/profilePicture",verifyToken,upload.single("avatar"), updateProfilePicture);
 
 // admin routes
-
 //! get routes
 router.get("/admin/users", getAllUsers);
 router.get("/admin/usersIds", getAllUsersIds);

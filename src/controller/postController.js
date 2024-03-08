@@ -236,11 +236,6 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
         like: { $size: "$like" },
       },
     },
-    // {
-    //   $match: {
-    //     isLiked: false,
-    //   },
-    // },
     {
       $skip: (page - 1) * perPage,
     },

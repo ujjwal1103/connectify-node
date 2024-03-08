@@ -44,6 +44,9 @@ const userSchema = new mongoose.Schema(
     avatar: {
       type: String,
     },
+    avatarSmall: {
+      type: String,
+    },
     coverImage: {
       type: String,
     },
@@ -79,7 +82,7 @@ const userSchema = new mongoose.Schema(
 userSchema.plugin(mongooseAggregatePaginate);
 
 userSchema.methods.generateAccessToken = function () {
-  console.log(this);
+
   return jwt.sign(
     {
       userId: this._id,
@@ -92,7 +95,7 @@ userSchema.methods.generateAccessToken = function () {
 };
 
 userSchema.methods.generateRefreshToken = function () {
-  console.log(this);
+
   return jwt.sign(
     {
       userId: this._id,

@@ -12,6 +12,8 @@ import Post from "../models/post.modal.js";
 import { Follow } from "../models/follow.model.js";
 import { getObjectId } from "../utils/index.js";
 
+import { resizeImage, resizeImageAndUpload } from "../utils/resizeImage.js";
+
 const generateAccessAndRefreshTokens = async (userId) => {
   try {
     const user = await User.findById(userId);
@@ -119,6 +121,7 @@ export const getUser = asyncHandler(async (req, res) => {
         email: 1,
         isPrivate: 1,
         avatar: 1,
+        avatarSmall: 1,
         bio: 1,
         gender: 1,
       },
@@ -374,11 +377,20 @@ export const editUser = asyncHandler(async (req, res) => {
     throw ApiError(400, "User not found");
   }
   let avatar = null;
-  console.log(avatar, "avatar");
+  let avatarSmall = null;
+
   if (user) {
     if (req.file) {
-      console.log(req.file.originalname);
-      avatar = await uploadImage(req.file.originalname, "profilePics");
+      const fileName = req.file.originalname;
+      avatar = await uploadImage(fileName, `profilePics/${user.username}`);
+      if (avatar) {
+        avatarSmall = await resizeImageAndUpload(
+          avatar,
+          fileName,
+          30,
+          `profilePics/${user.username}`
+        );
+      }
     }
     await User.findByIdAndUpdate(
       userId,
@@ -387,20 +399,26 @@ export const editUser = asyncHandler(async (req, res) => {
         bio,
         name,
         avatar,
+        avatarSmall,
         gender,
       },
       { new: true }
     );
 
-    if (avatar === null && !req.file) {
-      const result = await deleteImage(avatar);
-      console.log(result, "deletion result");
-    }
     return res.status(200).json({
       isSuccess: true,
-      updatedData: { username, bio, avatar, name, gender },
+      updatedData: { username, bio, avatar, name, gender, avatarSmall },
       message: "User updated successfully",
     });
+  }
+});
+
+export const updateProfilePicture = asyncHandler(async (req, res) => {
+  try {
+    const fileName = resizeImage(req.file.path, req.file.originalname, 30);
+    return res.status(200).json({ fileName });
+  } catch (error) {
+    console.log(error);
   }
 });
 
@@ -443,7 +461,6 @@ const getGoogleAuthToken = async (code) => {
         "Content-Type": "application/x-www-form-urlencoded",
       },
     });
-    console.log("response:", res);
 
     return res.data;
   } catch (error) {
@@ -471,7 +488,7 @@ export async function getGoogleUser({ id_token, access_token }) {
         },
       }
     );
-    console.log("authenticated user", res.data);
+
     return res.data;
   } catch (error) {
     console.log(error, "Error fetching Google user");
@@ -615,7 +632,6 @@ export const createNewUser = asyncHandler(async (req, res) => {
 
 export const editNewUser = asyncHandler(async (req, res) => {
   const { userId } = req.params;
-  console.log(req.body);
 
   const user = await User.findByIdAndUpdate(
     userId,

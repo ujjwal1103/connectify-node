@@ -42,7 +42,6 @@ export const getFollowers = asyncHandler(async (req, res) => {
 
   const sameUser = userId === currUserId;
 
-  console.log(sameUser);
 
   const followers = await Follow.aggregate([
     {
@@ -100,10 +99,10 @@ export const getFollowing = asyncHandler(async (req, res) => {
   const { userId: currentUserId } = req.user;
   const { userId } = req.params; // Include username in the request params
   const { username, page = 1, pageSize = 10 } = req.query;
-  console.log(page)
+ 
   const skipCount = (page - 1) * pageSize;
 
-  console.log(skipCount)
+
   const matchStage = {
     $match: {
       followerId: new mongoose.Types.ObjectId(userId),

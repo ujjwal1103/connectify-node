@@ -35,12 +35,23 @@ export const runSocket = () => {
         socket.on("Notification", (notify) => {
           if (notify) {
             const user = findUser(notify.to);
-            console.log(user, user?.socketId);
+           
             socket.to(user?.socketId).emit("Receive", notify.notification);
-            console.log("send successfully");
+          
           }
         });
+        socket.on("Send Message", (data) => {
+          if (data) {
+            const user = findUser(data.to); 
+            socket.to(user?.socketId).emit("Receive Message", data.notification);
+          
+          }
+        });
+
+
       });
+
+
 
       socket.on("disconnect", () => {
         deleteUser(socket.id);

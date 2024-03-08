@@ -5,25 +5,17 @@ import {
   uploadBytes,
 } from "firebase/storage";
 import { storage } from "../firebase.config.js";
-import fs from "fs";
+import { promises as fsPromises } from 'fs';
+
 export const uploadImage = async (filename, foldername) => {
-  try {
-    const storageRef = ref(storage, `${foldername}/${filename}`);
-
-    const file = fs.readFileSync(`public/images/${filename}`);
-
-    const snapshot = await uploadBytes(storageRef, file);
-
-    const downloadURL = await getDownloadURL(snapshot.ref);
-    if (downloadURL) {
-      fs.unlinkSync(`public/images/${filename}`);
-    }
-
-    return downloadURL;
-  } catch (error) {
-    console.log(error);
-    return error;
+  const storageRef = ref(storage, `${foldername}/${filename}`);
+  const file = await fsPromises.readFile(`public/images/${filename}`);
+  const snapshot = await uploadBytes(storageRef, file);
+  const downloadURL = await getDownloadURL(snapshot.ref);
+  if (downloadURL) {
+    await fsPromises.unlink(`public/images/${filename}`);
   }
+  return downloadURL;
 };
 
 export const deleteImage = async (image) => {
