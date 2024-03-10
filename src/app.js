@@ -30,6 +30,7 @@ const httpServer = createServer(app);
 export const io = new Server(httpServer, {
   cors: {
     origin: "*",
+    credentials: true,
   },
 });
 
@@ -55,7 +56,12 @@ app.use(limiter);
 
 app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
-app.use(cors());
+app.use(
+  cors({
+    origin: "*",
+    credentials: true,
+  })
+);
 app.set("Connection", "keep-alive");
 app.use(cookieParser());
 app.use(express.static("public"));
@@ -112,6 +118,7 @@ app.get("", (_, res) => {
 });
 
 io.use((socket, next) => {
+  console.log(socket.handshake);
   const user = JSON.parse(socket.handshake.query.user);
 
   if (user?._id && socket.id) {
