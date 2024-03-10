@@ -42,7 +42,6 @@ export const getFollowers = asyncHandler(async (req, res) => {
 
   const sameUser = userId === currUserId;
 
-
   const followers = await Follow.aggregate([
     {
       $match: {
@@ -99,9 +98,8 @@ export const getFollowing = asyncHandler(async (req, res) => {
   const { userId: currentUserId } = req.user;
   const { userId } = req.params; // Include username in the request params
   const { username, page = 1, pageSize = 10 } = req.query;
- 
-  const skipCount = (page - 1) * pageSize;
 
+  const skipCount = (page - 1) * pageSize;
 
   const matchStage = {
     $match: {
@@ -227,7 +225,9 @@ export const getFollowing = asyncHandler(async (req, res) => {
     },
   ]);
 
-  return res.status(200).json({ isSuccess: true, followings: [...followings] });
+  return res
+    .status(200)
+    .json({ isSuccess: true, followings, hasMore: followings.length > 0 });
 });
 
 export const getAllFollowers = asyncHandler(async (req, res) => {

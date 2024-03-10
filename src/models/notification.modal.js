@@ -14,14 +14,15 @@ const notificationSchema = new mongoose.Schema(
       ref: "User",
       required: true,
     },
-    content: {
+    text: {
       type: String,
       required: true,
     },
-    notificationType: {
+    type: {
       type: String,
       default: "POST_LIKED",
       required: true,
+      enum:["POST_LIKED","FOLLOW_RESQUEST","FOLLOW_REQUEST_ACCEPTED"]
     },
     postId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -37,3 +38,16 @@ const notificationSchema = new mongoose.Schema(
 
 const Notification = mongoose.model("Notification", notificationSchema);
 export default Notification;
+
+
+
+// {
+//   type: "POST_LIKE",
+//   postId: "2839820482742847387482738472",
+//   actionBy: "username",
+//   text: "ujjwal_lade liked your post",
+//   actionByUrl:
+//     "https://firebasestorage.googleapis.com/v0/b/connectify-29152.appspot.com/o/posts%2Fimage.png?alt=media&amp;token=20351c46-4db1-44bb-b8bb-f3c6a5b8ffee",
+//   postImageUrl:
+//     "https://firebasestorage.googleapis.com/v0/b/connectify-29152.appspot.com/o/posts%2Fimage.png?alt=media&amp;token=20351c46-4db1-44bb-b8bb-f3c6a5b8ffee",
+// },

@@ -14,7 +14,7 @@ export const sendMessage = async (req, res) => {
         isSuccess: false,
       });
     }
-
+    
     // Check if the user sending the message is a participant in the chat
     if (!existingChat.members.includes(from)) {
       return res.status(403).json({
@@ -66,13 +66,14 @@ export const getMessagesInChat = async (req, res) => {
   try {
     const skip = (page - 1) * pageSize;
     const messages = await Message.find({ chat })
-    .sort({ createdAt: -1 })
-    .skip(skip)
-    .limit(parseInt(pageSize))
-    .exec();
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(pageSize))
+      .exec();
     return res.status(200).json({
       isSuccess: true,
-      messages: messages.reverse(), 
+      messages: messages.reverse(),
+      hasMore: messages.length > 0,
     });
   } catch (error) {
     return res.status(500).json({

@@ -72,10 +72,18 @@ app.use("/api", likeRouter);
 app.use("/api", uploadRouter);
 
 app.get(
-  "/api/validetoken",
+  "/api/validtoken",
   verifyToken,
   asyncHandler((req, res) => {
     return res.status(200).json({ isValid: true });
+  })
+);
+app.get(
+  "/api/healthCheck",
+
+  asyncHandler((req, res) => {
+    const date = new Date();
+    return res.status(200).json({ success: true, date: new Date() });
   })
 );
 

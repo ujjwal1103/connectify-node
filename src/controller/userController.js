@@ -123,7 +123,6 @@ export const getUser = asyncHandler(async (req, res) => {
         avatar: 1,
         avatarSmall: 1,
         bio: 1,
-        gender: 1,
       },
     },
     {
@@ -190,9 +189,9 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
       $project: {
         username: 1,
         name: 1,
-        email: 1,
         isPrivate: 1,
         avatar: 1,
+        bio:1,
       },
     },
     {
