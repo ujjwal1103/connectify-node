@@ -97,8 +97,40 @@ export const createPost = asyncHandler(async (req, res) => {
   let post = new Post(newPost);
   post = await post.save();
 
+  const posts = await Post.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(post._id),
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "user",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              name: 1,
+              avatar: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        user: { $first: "$user" },
+        isLiked: false,
+        like: 0,
+      },
+    },
+  ]);
+
   return res.status(200).json({
-    post: post,
+    post: posts[0],
     message: "post created successfully",
     isSuccess: true,
   });
@@ -205,11 +237,6 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
       },
     },
     {
-      $match: {
-        isLiked: false,
-      },
-    },
-    {
       $skip: (page - 1) * perPage,
     },
     {
@@ -233,7 +260,7 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
 export const fetchAllPostsByUser = async (req, res) => {
   const { userId } = req.user;
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 3; // Number of posts per page
+  const limit = parseInt(req.query.limit) || 3;
   const totalPosts = await Post.countDocuments({ userId });
 
   const skip = (page - 1) * limit;
@@ -296,8 +323,6 @@ export const fetchAllPostsByUser = async (req, res) => {
       },
     },
   ]);
-
-  const p = await Post.aggregate([...postCommonAggregation(req)]);
 
   return res.status(200).json({ posts, isSuccess: true, ...paginationObject });
 };
@@ -498,8 +523,8 @@ export const getAllPosts = async (req, res) => {
   const page = parseInt(req.query.page) || 1; // Current page number
   const perPage = parseInt(req.query.size) || 5;
   const username = req.query.username;
-  // Number of posts per page
-  let query = {}; // Default empty query object
+
+  let query = {};
 
   if (username) {
     // If username query parameter exists, create a query to search by username starting with the query string
@@ -559,12 +584,13 @@ export const getAllPosts = async (req, res) => {
           username: "$user.username",
           name: "$user.name",
           avatar: "$user.avatar",
-          updatedAt: 1,
+          createdAt: 1,
           imageUrl: 1,
           caption: 1,
           hashtags: 1,
         },
       },
+
       {
         $match: query,
       },

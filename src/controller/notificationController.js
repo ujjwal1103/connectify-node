@@ -1,14 +1,7 @@
-// export default function deleteNotification(req, res){
-//     try {
 
 import Notification from "../models/notification.modal.js";
 
-//     } catch (error) {
 
-//     }
-// }
-
-// get all notifications of user
 
 export const getAllNotifications = async (req, res) => {
   const { userId } = req.user;

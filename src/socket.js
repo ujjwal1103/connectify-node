@@ -4,19 +4,18 @@ const users = new Set();
 
 const findUser = (userId) => {
   const user = Array.from(users).find((u) => u._id === userId);
-
   return user;
 };
 
-const addOrUpdateUser = (user, socket) => {
-  // Check if user with the same _id already exists
+export const addOrUpdateUser = (user, socket) => {
+
   const existingUser = Array.from(users).find((u) => u._id === user._id);
 
   if (existingUser) {
     users.delete(existingUser);
   }
 
-  users.add({ ...user, socketId: socket.id });
+  users.add({ ...user, socketId: socket });
 };
 
 const deleteUser = (socketId) => {
@@ -26,25 +25,29 @@ const deleteUser = (socketId) => {
   }
 };
 
+
 export const runSocket = () => {
   try {
     io.on("connection", (socket) => {
-      socket.on("addUser", (user) => {
-        addOrUpdateUser(user, socket);
-        socket.emit("allusers", Array.from(users));
-        socket.on("Notification", (notify) => {
-          if (notify) {
-            const user = findUser(notify.to);
-            console.log(user, user?.socketId);
-            socket.to(user?.socketId).emit("Receive", notify.notification);
-            console.log("send successfully");
-          }
-        });
+      io.emit("allusers", Array.from(users));
+      socket.on("Notification", (notify) => {
+        if (notify) {
+          const user = findUser(notify.to);
+
+          socket.to(user?.socketId).emit("Receive", notify.notification);
+        }
+      });
+      socket.on("Send Message", (data) => {
+        if (data) {
+          const user = findUser(data.to);
+          socket.to(user?.socketId).emit("Receive Message", data);
+        }
       });
 
+      console.log(users)
       socket.on("disconnect", () => {
         deleteUser(socket.id);
-        socket.broadcast.emit("allusers", Array.from(users));
+        io.emit("allusers", Array.from(users));
       });
     });
   } catch (error) {

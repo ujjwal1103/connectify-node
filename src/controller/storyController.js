@@ -60,5 +60,5 @@ export const getstories = asyncHandler(async (req, res) => {
 export const deleteStory = asyncHandler((req, res) => {
   const { storyId } = req.params;
 
-  console.log(storyId);
+
 });

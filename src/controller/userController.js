@@ -4,13 +4,15 @@ import bcrypt from "bcryptjs";
 import QueryString from "qs";
 import asyncHandler from "./../utils/asyncHandler.js";
 import { ApiError } from "./../utils/ApiError.js";
-import { uploadImage } from "../utils/uploadImage.js";
+import { deleteImage, uploadImage } from "../utils/uploadImage.js";
 import mongoose from "mongoose";
 
 import { users } from "../userdata.js";
 import Post from "../models/post.modal.js";
 import { Follow } from "../models/follow.model.js";
 import { getObjectId } from "../utils/index.js";
+
+import { resizeImage, resizeImageAndUpload } from "../utils/resizeImage.js";
 
 const generateAccessAndRefreshTokens = async (userId) => {
   try {
@@ -119,8 +121,8 @@ export const getUser = asyncHandler(async (req, res) => {
         email: 1,
         isPrivate: 1,
         avatar: 1,
+        avatarSmall: 1,
         bio: 1,
-        gender: 1,
       },
     },
     {
@@ -187,9 +189,9 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
       $project: {
         username: 1,
         name: 1,
-        email: 1,
         isPrivate: 1,
         avatar: 1,
+        bio:1,
       },
     },
     {
@@ -248,6 +250,11 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
 
 export const getUsers = asyncHandler(async (req, res) => {
   const { userId } = req.user;
+  const page = req.query.page || 1; // Default to page 1 if not provided
+  const limit = +req.query.limit || 10; // Default limit to 10 if not provided
+
+  const skip = (page - 1) * limit;
+
   const users = await User.aggregate([
     {
       $match: {
@@ -272,12 +279,28 @@ export const getUsers = asyncHandler(async (req, res) => {
       },
     },
     {
-      $limit: 5,
+      $skip: skip,
+    },
+    {
+      $limit: limit,
     },
   ]);
 
+  const totalCount = await User.countDocuments({
+    _id: { $ne: new mongoose.Types.ObjectId(userId) },
+  });
+
+  const totalPages = Math.ceil(totalCount / limit);
+  const hasMore = page < totalPages;
   return res.status(200).json({
     users: users,
+    pagination: {
+      currentPage: page,
+      totalPages: totalPages,
+      totalUsers: totalCount,
+      perPage: limit,
+      hasMore,
+    },
     isSuccess: true,
   });
 });
@@ -352,27 +375,84 @@ export const editUser = asyncHandler(async (req, res) => {
   if (!user) {
     throw ApiError(400, "User not found");
   }
-  let avatar;
+
   if (user) {
-    if (req.file) {
-      avatar = await uploadImage(req.file.originalname, "profilePics");
-    }
     await User.findByIdAndUpdate(
       userId,
       {
         username,
         bio,
         name,
-        avatar,
         gender,
       },
       { new: true }
     );
+
     return res.status(200).json({
       isSuccess: true,
+      updatedData: { username, bio, name, gender },
       message: "User updated successfully",
     });
   }
+});
+
+export const updateProfilePicture = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
+
+  if (!req.file) throw new ApiError(400, "Profile Picture is Missing");
+
+  const user = await User.findById(userId);
+  if (!user) throw new ApiError(400, "User not found");
+  const fileName = req.file.originalname;
+  const avatar = await uploadImage(fileName, `profilePics/${user.username}`);
+
+  if (!avatar) throw new ApiError(400, "Failed to upload profile pIcture");
+
+  const avatarSmall = await resizeImageAndUpload(
+    avatar,
+    fileName,
+    30,
+    `profilePics/${user.username}`
+  );
+
+  await deleteImage(user?.avatar);
+  await deleteImage(user?.avatarSmall);
+
+  await User.findByIdAndUpdate(
+    userId,
+    {
+      avatar,
+      avatarSmall,
+    },
+    { new: true }
+  );
+
+  await deleteImage(user?.avatar);
+  await deleteImage(user?.avatarSmall); 
+  
+  return res
+    .status(200)
+    .json({ success: true, avatars: { avatar, avatarSmall } });
+});
+
+export const removeProfilePicture = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
+  const user = await User.findById(userId);
+  if (!user) throw new ApiError(400, "User not found");
+
+  await deleteImage(user?.avatar);
+  await deleteImage(user?.avatarSmall);
+
+  await User.findByIdAndUpdate(
+    userId,
+    {
+      avatar: null,
+      avatarSmall: null,
+    },
+    { new: true }
+  );
+
+  return res.status(200).json({ isSuccess: true });
 });
 
 export const searchUsers = asyncHandler(async (req, res) => {
@@ -408,14 +488,12 @@ const getGoogleAuthToken = async (code) => {
     grant_type: "authorization_code",
   };
 
-  console.log(values);
   try {
     const res = await axios.post(url, QueryString.stringify(values), {
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
       },
     });
-    console.log("response:", res);
 
     return res.data;
   } catch (error) {
@@ -443,7 +521,7 @@ export async function getGoogleUser({ id_token, access_token }) {
         },
       }
     );
-    console.log("authenticated user", res.data);
+
     return res.data;
   } catch (error) {
     console.log(error, "Error fetching Google user");
@@ -587,7 +665,6 @@ export const createNewUser = asyncHandler(async (req, res) => {
 
 export const editNewUser = asyncHandler(async (req, res) => {
   const { userId } = req.params;
-  console.log(req.body);
 
   const user = await User.findByIdAndUpdate(
     userId,
@@ -669,4 +746,3 @@ export const deleteUserById = asyncHandler(async (req, res) => {
     message: "users deleted successfully",
   });
 });
-

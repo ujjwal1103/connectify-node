@@ -13,13 +13,14 @@ import {
   userRouter,
   followRouter,
   likeRouter,
-  uploadRouter
+  uploadRouter,
 } from "./routes/index.js";
 import { ApiError } from "./utils/ApiError.js";
 import asyncHandler from "./utils/asyncHandler.js";
 import { verifyToken } from "./middleware/index.js";
 import { Server } from "socket.io";
 import rateLimit from "express-rate-limit";
+import { addOrUpdateUser } from "./socket.js";
 
 dotenv.config({
   path: "./.env",
@@ -32,14 +33,13 @@ export const io = new Server(httpServer, {
   },
 });
 
-
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, 
-  max: 5000, 
-  standardHeaders: true, 
-  legacyHeaders: false, 
+  windowMs: 15 * 60 * 1000,
+  max: 5000,
+  standardHeaders: true,
+  legacyHeaders: false,
   keyGenerator: (req, _) => {
-    return req.clientIp; 
+    return req.clientIp;
   },
   handler: (_, __, ___, options) => {
     throw new ApiError(
@@ -50,7 +50,6 @@ const limiter = rateLimit({
     );
   },
 });
-
 
 app.use(limiter);
 
@@ -73,10 +72,18 @@ app.use("/api", likeRouter);
 app.use("/api", uploadRouter);
 
 app.get(
-  "/api/validetoken",
+  "/api/validtoken",
   verifyToken,
   asyncHandler((req, res) => {
     return res.status(200).json({ isValid: true });
+  })
+);
+app.get(
+  "/api/healthCheck",
+
+  asyncHandler((req, res) => {
+    const date = new Date();
+    return res.status(200).json({ success: true, date: new Date() });
   })
 );
 
@@ -102,6 +109,15 @@ app.get("", (_, res) => {
   </html>
   `;
   res.send(htmlContent);
+});
+
+io.use((socket, next) => {
+  const user = JSON.parse(socket.handshake.query.user);
+
+  if (user?._id && socket.id) {
+    addOrUpdateUser(user, socket.id);
+    next();
+  }
 });
 
 export { httpServer };
