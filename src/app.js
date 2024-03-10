@@ -29,7 +29,7 @@ const app = express();
 const httpServer = createServer(app);
 export const io = new Server(httpServer, {
   cors: {
-    origin: "*",
+    origin: process.env.CLIENT,
     credentials: true,
   },
 });
@@ -58,7 +58,7 @@ app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(
   cors({
-    origin: "*",
+    origin: process.env.CLIENT,
     credentials: true,
   })
 );
@@ -118,7 +118,7 @@ app.get("", (_, res) => {
 });
 
 io.use((socket, next) => {
-  console.log(socket.handshake);
+  console.log(socket.handshake.query);
   const user = JSON.parse(socket.handshake.query.user);
 
   if (user?._id && socket.id) {
