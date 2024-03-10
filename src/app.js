@@ -118,13 +118,9 @@ app.get("", (_, res) => {
 });
 
 io.use((socket, next) => {
-  console.log(socket.handshake.query);
-  if (socket.handshake.query?.user) {
-    const user = JSON.parse(socket.handshake.query.user);
-    if (user?._id && socket.id) {
-      addOrUpdateUser(user, socket.id);
-      next();
-    }
+  if (socket.handshake.auth?.userId) {
+    addOrUpdateUser(socket.handshake.auth, socket.id);
+    next();
   }
 });
 
