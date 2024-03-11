@@ -7,7 +7,8 @@ import chatRouter from "./chatRoutes.js";
 import messageRouter from "./messageRoutes.js";
 import followRouter from "./follow.route.js";
 import likeRouter from "./like.route.js";
-import uploadRouter from "./upload.route.js";
+import uploadRouter from "./upload.route.js"; 
+import followRequestRouter from "./followRequest.routes.js"; 
 
 export {
   userRouter,
@@ -20,4 +21,5 @@ export {
   followRouter,
   likeRouter,
   uploadRouter,
+  followRequestRouter
 };

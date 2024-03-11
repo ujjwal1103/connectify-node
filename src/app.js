@@ -14,6 +14,7 @@ import {
   followRouter,
   likeRouter,
   uploadRouter,
+  followRequestRouter,
 } from "./routes/index.js";
 import { ApiError } from "./utils/ApiError.js";
 import asyncHandler from "./utils/asyncHandler.js";
@@ -76,6 +77,7 @@ app.use("/api", messageRouter);
 app.use("/api", followRouter);
 app.use("/api", likeRouter);
 app.use("/api", uploadRouter);
+app.use("/api", followRequestRouter);
 
 app.get(
   "/api/validtoken",
