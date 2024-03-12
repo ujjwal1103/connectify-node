@@ -1,6 +1,7 @@
 import express from "express";
 import { verifyToken } from "../middleware/index.js";
 import {
+  acceptFollowRequest,
   deleteFollowRequest,
   getFollowRequestForUser,
   sendFollowRequest,
@@ -11,7 +12,7 @@ const router = express.Router();
 router.post("/followRequest/:requestedTo", verifyToken, sendFollowRequest);
 router.delete("/cancelFollow/:requestedTo", verifyToken, deleteFollowRequest);
 router.get("/followRequests", verifyToken, getFollowRequestForUser);
-// router.get("/following/:userId", verifyToken, getFollowing);
+router.patch("/accept/:requestId", verifyToken, acceptFollowRequest);
 // router.get("/admin/follows", getAllFollowers);
 
 export default router;

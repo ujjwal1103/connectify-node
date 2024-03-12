@@ -2,6 +2,7 @@ import mongoose from "mongoose";
 import { Follow } from "../models/follow.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import { createNotification } from "./notificationController.js";
 
 export const followUser = asyncHandler(async (req, res) => {
   const { userId: followerId } = req.user;
@@ -18,9 +19,19 @@ export const followUser = asyncHandler(async (req, res) => {
     followeeId,
   });
 
-  const result = await follow.save();
+  const rsp = await follow.save();
 
-  return res.status(200).json({ follow: true, result: result });
+  const notifObj = {
+    from: followerId,
+    text: "started following you",
+    to: followeeId,
+    type: "FOLLOWING",
+    followId: rsp._id,
+  };
+
+  const resp = await createNotification(notifObj);
+
+  return res.status(200).json({ follow: true, result: rsp });
 });
 
 export const unfollowUser = asyncHandler(async (req, res) => {

@@ -191,7 +191,8 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
         name: 1,
         isPrivate: 1,
         avatar: 1,
-        bio:1,
+        bio: 1,
+        avatarSmall: 1,
       },
     },
     {
@@ -208,6 +209,22 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
         localField: "_id",
         foreignField: "followerId",
         as: "following",
+      },
+    },
+    {
+      $lookup: {
+        from: "followrequests",
+        localField: "_id",
+        foreignField: "requestedTo",
+        as: "isRequested",
+        pipeline: [
+          {
+            $match: {
+              requestedBy: Id,
+              requestStatus: "PENDING",
+            },
+          },
+        ],
       },
     },
     {
@@ -234,6 +251,9 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
         },
         isIFollow: {
           $in: [Id, "$following.followeeId"],
+        },
+        isRequested: {
+          $in: [Id, "$isRequested.requestedBy"],
         },
       },
     },
@@ -428,8 +448,8 @@ export const updateProfilePicture = asyncHandler(async (req, res) => {
   );
 
   await deleteImage(user?.avatar);
-  await deleteImage(user?.avatarSmall); 
-  
+  await deleteImage(user?.avatarSmall);
+
   return res
     .status(200)
     .json({ success: true, avatars: { avatar, avatarSmall } });

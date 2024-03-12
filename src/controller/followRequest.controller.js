@@ -2,6 +2,12 @@ import mongoose from "mongoose";
 import { ApiError } from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { FollowRequest } from "../models/followRequest.modal.js";
+import {
+  createNotification,
+  deleteNotification,
+} from "./notificationController.js";
+import { Follow } from "../models/follow.model.js";
+import Notification from "../models/notification.modal.js";
 
 export const sendFollowRequest = asyncHandler(async (req, res) => {
   const { userId: requestedBy } = req.user;
@@ -21,6 +27,14 @@ export const sendFollowRequest = asyncHandler(async (req, res) => {
     requestedTo,
   });
 
+  const resp = await createNotification({
+    from: requestedBy,
+    text: "Requested to follow you",
+    to: requestedTo,
+    type: "FOLLOW_RESQUEST_SENT",
+    requestId: followRequest._id,
+  });
+
   return res.status(200).json({ requested: true, followRequest });
 });
 
@@ -36,15 +50,86 @@ export const deleteFollowRequest = asyncHandler(async (req, res) => {
   if (!result) {
     throw new ApiError(404, "User not found");
   }
+
+  const resp = await deleteNotification(requestedBy, requestedTo);
   return res.status(200).json({ requestCancel: true, result });
 });
 
 export const getFollowRequestForUser = asyncHandler(async (req, res) => {
   const { userId } = req.user;
 
-  const request = await FollowRequest.find({ requestedTo: userId }).populate('requestedBy');
+  const request = await FollowRequest.find({
+    requestedTo: userId,
+    requestStatus: "PENDING",
+  }).populate("requestedBy");
 
   return res.status(200).json({ isSuccess: true, followRequest: request });
+});
+
+export const followUser = asyncHandler(async (req, res) => {
+  const { userId: followerId } = req.user;
+  const { followeeId } = req.params;
+
+  const existingFollow = await Follow.findOne({ followerId, followeeId });
+
+  if (existingFollow) {
+    throw new ApiError(404, "Already follows this user");
+  }
+
+  const follow = new Follow({
+    followerId,
+    followeeId,
+  });
+
+  const result = await follow.save();
+
+  return res.status(200).json({ follow: true, result: result });
+});
+export const acceptFollowRequest = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
+  const { requestId } = req.params;
+
+  const request = await FollowRequest.findByIdAndUpdate(requestId, {
+    requestStatus: "ACCEPTED",
+  });
+
+  if (!request) {
+    throw new ApiError(404, "Invalid Request");
+  }
+  //create a followRecord
+  const followeeId = userId;
+  const followerId = request.requestedBy;
+
+  const follow = new Follow({
+    followerId,
+    followeeId,
+  });
+
+  const followResult = await follow.save();
+
+  //notification update for curr user
+  const notification = await Notification.findOneAndUpdate(
+    { from: followerId, to: userId },
+    { type: "FOLLOWING", text: "started following you" },
+    { new: true }
+  );
+
+  //send notifcation as request accepted
+  const resp = await createNotification({
+    from: followeeId,
+    text: "accepted your follow request",
+    to: followerId,
+    type: "FOLLOW_REQUEST_ACCEPTED",
+    followId: followResult._id,
+  });
+
+  return res.status(200).json({
+    isSuccess: true,
+    followRequest: request,
+    followResult,
+    notification,
+    resp,
+  });
 });
 
 // export const getFollowers = asyncHandler(async (req, res) => {

@@ -22,7 +22,12 @@ const notificationSchema = new mongoose.Schema(
       type: String,
       default: "POST_LIKED",
       required: true,
-      enum:["POST_LIKED","FOLLOW_RESQUEST","FOLLOW_REQUEST_ACCEPTED"]
+      enum: [
+        "POST_LIKED",
+        "FOLLOW_RESQUEST_SENT",
+        "FOLLOW_REQUEST_ACCEPTED",
+        "FOLLOWING",
+      ],
     },
     postId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -32,14 +37,20 @@ const notificationSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Comment",
     },
+    requestId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "FollowRequest",
+    },
+    followId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Follow",
+    },
   },
   { timestamps: true }
 );
 
 const Notification = mongoose.model("Notification", notificationSchema);
 export default Notification;
-
-
 
 // {
 //   type: "POST_LIKE",
