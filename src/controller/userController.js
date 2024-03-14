@@ -123,6 +123,7 @@ export const getUser = asyncHandler(async (req, res) => {
         avatar: 1,
         avatarSmall: 1,
         bio: 1,
+        gender: 1,
       },
     },
     {
@@ -295,6 +296,32 @@ export const getUsers = asyncHandler(async (req, res) => {
           $not: {
             $elemMatch: { followerId: new mongoose.Types.ObjectId(userId) },
           },
+        },
+      },
+    },
+    {
+      $lookup: {
+        from: "followrequests",
+        localField: "_id",
+        foreignField: "requestedTo",
+        as: "isRequested",
+        pipeline: [
+          {
+            $match: {
+              requestedBy: new mongoose.Types.ObjectId(userId),
+              requestStatus: "PENDING",
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        isRequested: {
+          $in: [
+            new mongoose.Types.ObjectId(userId),
+            "$isRequested.requestedBy",
+          ],
         },
       },
     },
