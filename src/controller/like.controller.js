@@ -11,6 +11,10 @@ const like = asyncHandler(async (req, res) => {
     likedBy: userId,
   };
 
+  if (!postId && !commentId) {
+    throw new ApiError(400, "Reference Id is missing");
+  }
+
   if (!commentId && postId) {
     newLike.postId = postId;
   }
@@ -33,13 +37,17 @@ const like = asyncHandler(async (req, res) => {
 });
 
 const unlike = asyncHandler(async (req, res) => {
-  const { postId, commentId } = req.body;
+  const { postId, commentId } = req.query;
   const { userId } = req.user;
-
+  console.log(postId, commentId, userId, req.query);
   const newLike = {
     likedBy: userId,
   };
-  
+
+  if (!postId && !commentId) {
+    throw new ApiError(400, "Reference Id is missing");
+  }
+
   if (!commentId && postId) {
     newLike.postId = postId;
   }
@@ -147,13 +155,11 @@ const fetchlikes = asyncHandler(async (req, res) => {
   return res.status(200).json({ likes });
 });
 
+//admine
 
-
-//admine 
-
-const fetchAllLikes = asyncHandler(async(req, res)=>{
-  const likes = await Like.find().populate('likedBy')
+const fetchAllLikes = asyncHandler(async (req, res) => {
+  const likes = await Like.find().populate("likedBy");
   return res.status(200).json({ likes });
-})
+});
 
 export { like, unlike, fetchlikes, fetchAllLikes };
