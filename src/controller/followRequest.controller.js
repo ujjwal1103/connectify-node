@@ -8,6 +8,8 @@ import {
 } from "./notificationController.js";
 import { Follow } from "../models/follow.model.js";
 import Notification from "../models/notification.modal.js";
+import { emitEvent } from "../utils/index.js";
+import { ACCEPT_REQUEST, NEW_REQUEST } from "../utils/constant.js";
 
 export const sendFollowRequest = asyncHandler(async (req, res) => {
   const { userId: requestedBy } = req.user;
@@ -35,6 +37,8 @@ export const sendFollowRequest = asyncHandler(async (req, res) => {
     requestId: followRequest._id,
   });
 
+  emitEvent(req, NEW_REQUEST, [requestedTo], resp);
+
   return res.status(200).json({ requested: true, followRequest });
 });
 
@@ -52,6 +56,7 @@ export const deleteFollowRequest = asyncHandler(async (req, res) => {
   }
 
   const resp = await deleteNotification(requestedBy, requestedTo);
+  emitEvent(req, NEW_REQUEST, [requestedTo], resp);
   return res.status(200).json({ requestCancel: true, result });
 });
 
@@ -122,6 +127,8 @@ export const acceptFollowRequest = asyncHandler(async (req, res) => {
     type: "FOLLOW_REQUEST_ACCEPTED",
     followId: followResult._id,
   });
+
+  emitEvent(req, ACCEPT_REQUEST, [followeeId, followerId], resp);
 
   return res.status(200).json({
     isSuccess: true,

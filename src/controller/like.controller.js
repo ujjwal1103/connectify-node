@@ -2,9 +2,12 @@ import mongoose from "mongoose";
 import Like from "../models/like.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import { createNotification } from "./notificationController.js";
+import { emitEvent } from "../utils/index.js";
+import { LIKE_POST } from "../utils/constant.js";
 
 const like = asyncHandler(async (req, res) => {
-  const { postId, commentId } = req.body;
+  const { postId, commentId, postUserId } = req.body;
   const { userId } = req.user;
 
   const newLike = {
@@ -30,6 +33,17 @@ const like = asyncHandler(async (req, res) => {
   }
 
   const liked = await Like.create(newLike);
+
+  const resp = await createNotification({
+    from: userId,
+    text: "Liked your post",
+    to: postUserId,
+    type: "LIKE_POST",
+    postId: postId,
+  });
+
+  emitEvent(req, LIKE_POST, [postUserId], liked);
+
   res.status(200).json({
     liked: liked,
     isLiked: true,
@@ -39,7 +53,7 @@ const like = asyncHandler(async (req, res) => {
 const unlike = asyncHandler(async (req, res) => {
   const { postId, commentId } = req.query;
   const { userId } = req.user;
-  console.log(postId, commentId, userId, req.query);
+
   const newLike = {
     likedBy: userId,
   };

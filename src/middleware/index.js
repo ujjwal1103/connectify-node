@@ -67,6 +67,7 @@ export const isAdmin = (req, rea, next) => {
   const secretKey = "ujjwal";
 };
 
+
 export const validateUsername = asyncHandler(async (req, res, next) => {
   const usernamePattern = /^(?!^[0-9])(?!.*[^a-z0-9_]).+$/;
   const username = req.params.username;

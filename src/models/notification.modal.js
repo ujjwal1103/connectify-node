@@ -20,10 +20,10 @@ const notificationSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      default: "POST_LIKED",
+      default: "LIKE_POST",
       required: true,
       enum: [
-        "POST_LIKED",
+        "LIKE_POST",
         "FOLLOW_RESQUEST_SENT",
         "FOLLOW_REQUEST_ACCEPTED",
         "FOLLOWING",
@@ -44,6 +44,10 @@ const notificationSchema = new mongoose.Schema(
     followId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Follow",
+    },
+    seen: {
+      type: Boolean,
+      default: false,
     },
   },
   { timestamps: true }

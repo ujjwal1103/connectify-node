@@ -1,5 +1,9 @@
+import mongoose from "mongoose";
 import Chat from "../models/chat.modal.js";
 import Message from "../models/message.modal.js";
+import { emitEvent } from "../utils/index.js";
+import { SEEN_MESSAGES } from "../utils/constant.js";
+import asyncHandler from "../utils/asyncHandler.js";
 
 export const sendMessage = async (req, res) => {
   const { userId: from } = req.user;
@@ -14,7 +18,7 @@ export const sendMessage = async (req, res) => {
         isSuccess: false,
       });
     }
-    
+
     // Check if the user sending the message is a participant in the chat
     if (!existingChat.members.includes(from)) {
       return res.status(403).json({
@@ -50,6 +54,7 @@ export const sendMessage = async (req, res) => {
     return res.status(200).json({
       isSuccess: true,
       chatId: chat,
+      message,
     });
   } catch (error) {
     return res.status(500).json({
@@ -59,21 +64,63 @@ export const sendMessage = async (req, res) => {
   }
 };
 
-// This controller allows you to retrieve messages from a specific chat.
+
 export const getMessagesInChat = async (req, res) => {
   const { chat } = req.params;
   const { page = 1, pageSize = 20 } = req.query;
+  const { userId } = req.user;
   try {
     const skip = (page - 1) * pageSize;
+
+    const unreadMessages = await Message.aggregate([
+      {
+        $match: {
+          chat: new mongoose.Types.ObjectId(chat),
+          seen: false,
+          from: { $ne: new mongoose.Types.ObjectId(userId) },
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+        },
+      },
+    ]);
+
+    const idsOnly = unreadMessages.map((messages) => messages._id);
+
+    await Message.updateMany(
+      {
+        _id: { $in: idsOnly },
+      },
+      {
+        $set: {
+          seen: true,
+        },
+      }
+    );
+    const totalCount = await Message.countDocuments({ chat });
+    const totalPages = Math.ceil(totalCount / pageSize);
     const messages = await Message.find({ chat })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(parseInt(pageSize))
       .exec();
+
+    if (page === 1) {
+      emitEvent(
+        req,
+        SEEN_MESSAGES,
+        [messages[0]?.from, messages[0]?.to],
+        "test"
+      );
+    }
+
     return res.status(200).json({
       isSuccess: true,
       messages: messages.reverse(),
       hasMore: messages.length > 0,
+      totalPages,
     });
   } catch (error) {
     return res.status(500).json({

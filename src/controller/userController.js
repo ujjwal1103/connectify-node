@@ -600,12 +600,14 @@ export const googleAuthenticate = async (req, res) => {
 
 export const makeAccountPrivate = asyncHandler(async (req, res) => {
   const { userId } = req.user;
+  const {isPrivate} = req.query;
+  
   const updatedUser = await User.findByIdAndUpdate(
     userId,
-    { isPrivate: true },
+    { isPrivate:isPrivate },
     { new: true }
   );
-  return res.status(200).json({ isSuccess: !!updatedUser });
+  return res.status(200).json({ isSuccess: !!updatedUser, updatedUser });
 });
 
 export const createUsers = asyncHandler(async (_, res) => {

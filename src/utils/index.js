@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { userSocketIDs } from "../socket.js";
 
 export function formatDateDifference(date) {
   const now = new Date();
@@ -29,4 +30,16 @@ export function formatDateDifference(date) {
 
 export const getObjectId = (id) => {
   return new mongoose.Types.ObjectId(id);
+};
+export const getSockets = (users = []) => {
+  const sockets = users.map((user) => userSocketIDs.get(user.toString()));
+  return sockets;
+};
+
+export const emitEvent = (req, event, users, data) => {
+
+  const io = req.app.get("io");
+  const sockets = getSockets(users);
+ 
+  io.to(sockets).emit(event, data);
 };
