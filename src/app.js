@@ -22,6 +22,7 @@ import { verifyToken } from "./middleware/index.js";
 import { Server } from "socket.io";
 import rateLimit from "express-rate-limit";
 import { addOrUpdateUser } from "./socket.js";
+import User from "./models/user.modal.js";
 
 dotenv.config({
   path: "./.env",
@@ -31,7 +32,6 @@ const httpServer = createServer(app);
 export const io = new Server(httpServer, {
   cors: {
     origin: process.env.CLIENT,
-    credentials: true,
   },
 });
 
@@ -64,6 +64,7 @@ app.use(
   })
 );
 app.set("Connection", "keep-alive");
+app.set('io',io)
 app.use(cookieParser());
 app.use(express.static("public"));
 
@@ -119,9 +120,12 @@ app.get("", (_, res) => {
   res.send(htmlContent);
 });
 
-io.use((socket, next) => {
+
+
+io.use(async(socket, next) => {
   if (socket.handshake.auth?.userId) {
-    addOrUpdateUser(socket.handshake.auth, socket.id);
+    const user = await User.findById(socket.handshake.auth?.userId).select('username _id avatar');
+    socket.user = user;
     next();
   }
 });

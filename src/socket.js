@@ -1,7 +1,10 @@
 import { io } from "./app.js";
+import { NEW_MESSAGE } from "./utils/constant.js";
+import { getSockets } from "./utils/index.js";
 
 const users = new Set();
 
+export const userSocketIDs = new Map()
 const findUser = (userId) => {
   const user = Array.from(users).find((u) => u.userId === userId);
   return user;
@@ -24,21 +27,29 @@ const deleteUser = (socketId) => {
   }
 };
 
+
 export const runSocket = () => {
   try {
+ 
+
     io.on("connection", (socket) => {
-      io.emit("allusers", Array.from(users));
+      const user = socket.user;
+      userSocketIDs.set(user._id.toString(), socket.id);
+     
       socket.on("Notification", (notify) => {
         if (notify) {
           const user = findUser(notify.to);
           socket.to(user?.socketId).emit("Receive", notify.notification);
         }
       });
-      socket.on("Send Message", (data) => {
+
+
+      socket.on(NEW_MESSAGE, (data) => {
+       
         if (data) {
-          const user = findUser(data.to);
-          console.log(user, "user we found to send this message");
-          socket.to(user?.socketId).emit("Receive Message", data);
+          const sockets = getSockets([data.to]);
+         
+          io.to(sockets).emit(NEW_MESSAGE, data);
         }
       });
 

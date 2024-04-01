@@ -24,7 +24,7 @@ const commentSchema = new mongoose.Schema({
     },
   ],
   mentions: [{ type: String, required: true, default: [] }],
-});
+},{timestamps:true});
 
 const Comment = mongoose.model("Comment", commentSchema);
 export default Comment;

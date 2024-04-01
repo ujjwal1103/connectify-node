@@ -1,5 +1,4 @@
 import Comment from "../models/comment.modal.js";
-import { formatDateDifference } from "../utils/index.js";
 
 export const getComments = async (req, res) => {
   const { post } = req.params;
@@ -11,15 +10,8 @@ export const getComments = async (req, res) => {
       .populate("from", "username avatar")
       .lean();
 
-    const formattedComments = comments.map((comment) => {
-      return {
-        ...comment,
-        createdAt: formatDateDifference(comment.createdAt),
-        updatedAt: formatDateDifference(comment.updatedAt),
-      };
-    });
     return res.status(200).json({
-      comments: formattedComments,
+      comments,
       isSuccess: true,
     });
   } catch (err) {
@@ -49,11 +41,7 @@ export const addComment = async (req, res) => {
       .lean();
 
     return res.status(201).json({
-      comment: {
-        ...c,
-        createdAt: formatDateDifference(c.createdAt),
-        updatedAt: formatDateDifference(c.updatedAt),
-      },
+      comment: c,
       isSuccess: true,
     });
   } catch (err) {

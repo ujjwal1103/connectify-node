@@ -439,12 +439,12 @@ export const deletePost = async (req, res) => {
 
 export const getSinglePost = asyncHandler(async (req, res) => {
   const { postId } = req.params;
+  const { userId } = req.user;
+  const Id = new mongoose.Types.ObjectId(userId);
 
   const p = await Post.aggregate([
     {
-      $match: {
-        _id: new mongoose.Types.ObjectId(postId),
-      },
+      $match: { _id: new mongoose.Types.ObjectId(postId) },
     },
     {
       $lookup: {
@@ -458,14 +458,67 @@ export const getSinglePost = asyncHandler(async (req, res) => {
               username: 1,
               name: 1,
               avatar: 1,
+              isPrivate: 1,
+            },
+          },
+          {
+            $lookup: {
+              from: "follows",
+              localField: "_id",
+              foreignField: "followeeId",
+              as: "isFollow",
+              pipeline: [
+                {
+                  $match: {
+                    followerId: Id,
+                  },
+                },
+              ],
+            },
+          },
+          {
+            $addFields: {
+              isFollow: {
+                $cond: {
+                  if: {
+                    $gte: [
+                      {
+                        $size: "$isFollow",
+                      },
+                      1,
+                    ],
+                  },
+                  then: true,
+                  else: false,
+                },
+              },
+            },
+          },
+          {
+            $addFields: {
+              showPost: {
+                $cond: {
+                  if: {
+                    $eq: ["$isFollow", "$isPrivate"],
+                  },
+                  then: true,
+                  else: { $not: "$isPrivate" },
+                },
+              },
             },
           },
         ],
       },
     },
-
     {
       $unwind: "$user",
+    },
+    {
+      $match: {
+        $expr: {
+          $eq: ["$user.showPost", true],
+        },
+      },
     },
     {
       $lookup: {
@@ -473,31 +526,14 @@ export const getSinglePost = asyncHandler(async (req, res) => {
         localField: "_id",
         foreignField: "postId",
         as: "like",
-        pipeline: [
-          {
-            $count: "like",
-          },
-        ],
       },
     },
     {
       $addFields: {
-        like: { $first: "$like" },
-      },
-    },
-    {
-      $addFields: {
-        like: "$like.like",
-      },
-    },
-    {
-      $project: {
-        user: 1,
-        imageUrl: 1,
-        like: 1,
-        caption: 1,
-        hashtags: 1,
-        createdAt: 1,
+        isLiked: {
+          $in: [Id, "$like.likedBy"],
+        },
+        like: { $size: "$like" },
       },
     },
   ]);
@@ -507,12 +543,6 @@ export const getSinglePost = asyncHandler(async (req, res) => {
       message: "post fetched successfully",
       post: p[0],
       isSuccess: true,
-    });
-  } else {
-    return res.status(500).json({
-      error: error,
-      message: "Post not found",
-      isSuccess: false,
     });
   }
 });

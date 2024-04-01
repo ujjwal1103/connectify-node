@@ -10,7 +10,7 @@ import { storage } from "../firebase.config.js";
 import { ApiError } from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { uploadImage } from "../utils/uploadImage.js";
-import Post from "../models/post.modal.js";
+
 
 export const uploadImageToFirebase = asyncHandler(async (req, res) => {
   const imageUrl = await uploadImage(req.file.originalname, "uploads");

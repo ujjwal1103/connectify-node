@@ -11,7 +11,6 @@ export const resizeImage = async (imagePath, name, size = 20) => {
   const res = await sharp(imagePath).resize(size).toFile(resizedImagePath);
 
   if (res) {
-    console.log(res);
     return fileName;
   }
 };

@@ -1,16 +1,44 @@
 import mongoose from "mongoose";
 import Notification from "../models/notification.modal.js";
 import { getObjectId } from "../utils/index.js";
+import asyncHandler from "../utils/asyncHandler.js";
 
 export const getAllNotifications = async (req, res) => {
   const { userId } = req.user;
   const Id = getObjectId(userId);
   try {
-    // const notifications = await Notification.find({ to: userId })
-    //   .sort({
-    //     updatedAt: -1,
-    //   })
-    //   .populate("from postId");
+    const unSeenNotifications = await Notification.aggregate([
+      {
+        $match: {
+          to: Id,
+          seen: false,
+        },
+      },
+      {
+        $sort: {
+          createdAt: -1,
+        },
+      },
+      {
+        $project: {
+          _id: 1,
+        },
+      },
+    ]);
+
+    const idsOnly = unSeenNotifications.map((notification) => notification._id);
+
+    // Update seen field of unseen notifications to true
+    await Notification.updateMany(
+      {
+        _id: { $in: idsOnly },
+      },
+      {
+        $set: {
+          seen: true,
+        },
+      }
+    );
 
     const notifications = await Notification.aggregate([
       {
@@ -20,7 +48,7 @@ export const getAllNotifications = async (req, res) => {
       },
       {
         $sort: {
-          updatedAt: -1,
+          createdAt: -1,
         },
       },
       {
@@ -62,16 +90,36 @@ export const getAllNotifications = async (req, res) => {
         },
       },
       {
+        $lookup: {
+          from: "posts",
+          localField: "postId",
+          foreignField: "_id",
+          as: "postId",
+          pipeline: [
+            {
+              $project: {
+                imageUrl: 1,
+              },
+            },
+          ],
+        },
+      },
+      {
         $addFields: {
           from: {
             $first: "$from",
           },
+          postId: {
+            $first: "$postId",
+          },
         },
       },
     ]);
+
     return res.status(200).json({
       notifications: notifications,
       isSuccess: true,
+      idsOnly,
     });
   } catch (err) {
     return res.status(500).json({
@@ -131,6 +179,37 @@ export const createNotification = async ({
   });
   return await newNotification.save();
 };
+
+export const getUnseenNotificationCount = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
+  const Id = getObjectId(userId);
+  const notificationCount = await Notification.aggregate([
+    {
+      $match: {
+        to: Id,
+        seen: false,
+      },
+    },
+    {
+      $sort: {
+        createdAt: -1,
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+      },
+    },
+    {
+      $count: "notificationCount",
+    },
+  ]);
+
+  return res.status(200).json({
+    notifications: notificationCount[0]?.notificationCount||0,
+    isSuccess: true,
+  });
+});
 
 export const deleteNotification = async (from, to) => {
   const res = await Notification.findOneAndDelete({ from, to });

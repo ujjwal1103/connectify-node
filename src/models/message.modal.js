@@ -24,8 +24,9 @@ const messageSchema = new mongoose.Schema({
     ref: "Chat",
     required: true,
   },
-  seenAt: {
-    type: Date,
+  seen: {
+    type: Boolean,
+    default:false
   }
 },{timestamps: true});
 

@@ -4,6 +4,9 @@ import User from "../models/user.modal.js";
 import asyncHandler from "./../utils/asyncHandler.js";
 import { ApiError } from "./../utils/ApiError.js";
 import mongoose from "mongoose";
+import Message from "../models/message.modal.js";
+import { emitEvent } from "../utils/index.js";
+import { REFECTCH_CHATS } from "../utils/constant.js";
 
 export const createChat = asyncHandler(async (req, res) => {
   const {
@@ -65,7 +68,13 @@ export const createChat = asyncHandler(async (req, res) => {
   const friend = await chat.members.find(
     (member) => member._id.toString() !== userId
   );
+
+
+
   delete chat.members;
+
+  emitEvent(req, REFECTCH_CHATS, [friend._id] )
+
   return res.status(201).json({
     isSuccess: true,
     chat: { ...chat, friend: friend },
@@ -108,8 +117,6 @@ export const getAllChats = async (req, res) => {
             {
               $project: {
                 chat: 0,
-                
-                
               },
             },
           ],
@@ -131,21 +138,20 @@ export const getAllChats = async (req, res) => {
             ],
           },
           lastMessage: {
-            $first: '$lastMessage'
-          }
+            $first: "$lastMessage",
+          },
         },
       },
       {
         $project: {
-          members: 0, 
-          __v:0  // Remove the membersDetails field after adding the friend field
+          members: 0,
+          __v: 0, // Remove the membersDetails field after adding the friend field
         },
       },
       {
         $sort: { updatedAt: -1 },
       },
     ]);
-
 
     return res.status(201).json({
       isSuccess: true,
@@ -195,6 +201,12 @@ export const deleteChatById = async (req, res) => {
         isSuccess: false,
       });
     }
+    const deletedMessages = await Message.deleteMany({ chat: chatId });
+
+
+    emitEvent(req, REFECTCH_CHATS, deletedChat.members )
+
+
 
     return res.status(200).json({
       isSuccess: true,
