@@ -2,8 +2,12 @@ import mongoose from "mongoose";
 import Post from "../models/post.modal.js";
 import User from "../models/user.modal.js";
 import { ApiError } from "../utils/ApiError.js";
-import { deleteImage, uploadImage } from "../utils/uploadImage.js";
+import { deleteImage, uploadImages } from "../utils/uploadImage.js";
 import asyncHandler from "./../utils/asyncHandler.js";
+import {
+  uploadMultipleOnCloudinary,
+  deleteMultipleFromCloudinary,
+} from "../utils/cloudinary.js";
 
 const postCommonAggregation = (req) => {
   return [
@@ -71,6 +75,7 @@ const postCommonAggregation = (req) => {
 };
 
 export const createPost = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
   let { caption } = req.body;
 
   let hashtagMatches;
@@ -83,16 +88,26 @@ export const createPost = asyncHandler(async (req, res) => {
       : [];
   }
 
-  if (!req.file) {
+  if (!req.files.length) {
     throw new ApiError(404, "Image is required");
   }
 
-  const imageUrl = await uploadImage(req.file.originalname, "posts");
+  const filePaths = req.files.map((f) => f.path);
+
+  const imageUrl = await uploadMultipleOnCloudinary(
+    filePaths,
+    `${userId}/postImages`
+  );
+
+  if (!imageUrl || imageUrl.length === 0) {
+    throw new ApiError(404, "Images are required");
+  }
   const newPost = {
     caption,
-    imageUrl,
+    imageUrl: imageUrl.map((im) => im.url),
+    imageurlsPublicIds: imageUrl,
     hashtags,
-    userId: req.user.userId,
+    userId: userId,
   };
   let post = new Post(newPost);
   post = await post.save();
@@ -142,7 +157,8 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const perPage = 3; // Number of posts per page
   const Id = new mongoose.Types.ObjectId(userId);
-  const posts = await Post.aggregate([
+
+  const postAggregation = [
     {
       $sort: { updatedAt: -1 },
     },
@@ -177,6 +193,21 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
             },
           },
           {
+            $lookup: {
+              from: "followrequests",
+              localField: "_id",
+              foreignField: "requestedTo",
+              as: "isFollow",
+              pipeline: [
+                {
+                  $match: {
+                    requestedBy: Id,
+                  },
+                },
+              ],
+            },
+          },
+          {
             $addFields: {
               isFollow: {
                 $cond: {
@@ -199,10 +230,13 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
               showPost: {
                 $cond: {
                   if: {
-                    $eq: ["$isFollow", "$isPrivate"],
+                    $or: [
+                      { $eq: ["$_id", Id] }, // Logged-in user is the author
+                      { $eq: ["$isFollow", "$isPrivate"] }, // Follower can see private posts
+                    ],
                   },
                   then: true,
-                  else: { $not: "$isPrivate" },
+                  else: { $not: "$isPrivate" }, // Non-private posts are always visible
                 },
               },
             },
@@ -220,6 +254,18 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
         },
       },
     },
+  ];
+
+  const count = await Post.aggregate([
+    ...postAggregation,
+    {
+      $count: "postCount",
+    },
+  ]);
+
+
+  const posts = await Post.aggregate([
+    ...postAggregation,
     {
       $lookup: {
         from: "likes",
@@ -244,7 +290,7 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
     },
   ]);
 
-  const totalPosts = await Post.countDocuments();
+  const totalPosts = count[0].postCount;
   const totalPages = Math.ceil(totalPosts / perPage);
 
   return res.status(200).json({
@@ -415,8 +461,28 @@ export const deletePost = async (req, res) => {
 
   try {
     const p = await Post.findById(postId);
+
+    if (!p) {
+      throw new ApiError(400, "INVALIDE POST ID");
+    }
+
+    console.log(p);
+
+    const publicIds = p.imageurlsPublicIds.map((i) => i.publicId);
+    const deleteResult = await deleteMultipleFromCloudinary(publicIds);
+    console.log(deleteResult);
+
+    if (!deleteResult) {
+      return res.status(500).json({
+        error: error,
+        message: error.message || "Internal server error",
+        isSuccess: false,
+      });
+    }
+
     await Post.findByIdAndDelete(postId);
-    await deleteImage(p.imageUrl);
+
+    console.log(deleteResult);
     const { userId } = req.user;
     await User.findByIdAndUpdate(
       userId,

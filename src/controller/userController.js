@@ -4,15 +4,17 @@ import bcrypt from "bcryptjs";
 import QueryString from "qs";
 import asyncHandler from "./../utils/asyncHandler.js";
 import { ApiError } from "./../utils/ApiError.js";
-import { deleteImage, uploadImage } from "../utils/uploadImage.js";
+import { deleteImage } from "../utils/uploadImage.js";
 import mongoose from "mongoose";
 
 import { users } from "../userdata.js";
 import Post from "../models/post.modal.js";
 import { Follow } from "../models/follow.model.js";
 import { getObjectId } from "../utils/index.js";
-
-import { resizeImage, resizeImageAndUpload } from "../utils/resizeImage.js";
+import {
+  deleteFromCloudinary,
+  uploadOnCloudinary,
+} from "../utils/cloudinary.js";
 
 const generateAccessAndRefreshTokens = async (userId) => {
   try {
@@ -121,7 +123,6 @@ export const getUser = asyncHandler(async (req, res) => {
         email: 1,
         isPrivate: 1,
         avatar: 1,
-        avatarSmall: 1,
         bio: 1,
         gender: 1,
       },
@@ -193,7 +194,6 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
         isPrivate: 1,
         avatar: 1,
         bio: 1,
-        avatarSmall: 1,
       },
     },
     {
@@ -450,36 +450,34 @@ export const updateProfilePicture = asyncHandler(async (req, res) => {
 
   const user = await User.findById(userId);
   if (!user) throw new ApiError(400, "User not found");
-  const fileName = req.file.originalname;
-  const avatar = await uploadImage(fileName, `profilePics/${user.username}`);
 
-  if (!avatar) throw new ApiError(400, "Failed to upload profile pIcture");
+  const resp = await uploadOnCloudinary(req.file.path, `${user?._id}/profilePictures`
 
-  const avatarSmall = await resizeImageAndUpload(
-    avatar,
-    fileName,
-    30,
-    `profilePics/${user.username}`
   );
 
-  await deleteImage(user?.avatar);
-  await deleteImage(user?.avatarSmall);
+  const avatar = resp.url;
+  const avatarWithPublicId = {
+    url: resp.url,
+    publicId: resp.public_id,
+  };
+
+
+  if (!avatar) throw new ApiError(400, "Failed to upload profile pIcture");
 
   await User.findByIdAndUpdate(
     userId,
     {
       avatar,
-      avatarSmall,
+      avatarWithPublicId,
     },
     { new: true }
   );
 
-  await deleteImage(user?.avatar);
-  await deleteImage(user?.avatarSmall);
+  if (user?.avatarWithPublicId?.publicId) {
+    await deleteFromCloudinary([user.avatarWithPublicId.publicId]);
+  }
 
-  return res
-    .status(200)
-    .json({ success: true, avatars: { avatar, avatarSmall } });
+  return res.status(200).json({ success: true, avatars: { avatar } });
 });
 
 export const removeProfilePicture = asyncHandler(async (req, res) => {
@@ -487,14 +485,14 @@ export const removeProfilePicture = asyncHandler(async (req, res) => {
   const user = await User.findById(userId);
   if (!user) throw new ApiError(400, "User not found");
 
-  await deleteImage(user?.avatar);
-  await deleteImage(user?.avatarSmall);
+  if (user?.avatarWithPublicId?.publicId) {
+    await deleteFromCloudinary([user.avatarWithPublicId.publicId]);
+  }
 
   await User.findByIdAndUpdate(
     userId,
     {
       avatar: null,
-      avatarSmall: null,
     },
     { new: true }
   );
@@ -600,11 +598,11 @@ export const googleAuthenticate = async (req, res) => {
 
 export const makeAccountPrivate = asyncHandler(async (req, res) => {
   const { userId } = req.user;
-  const {isPrivate} = req.query;
-  
+  const { isPrivate } = req.query;
+
   const updatedUser = await User.findByIdAndUpdate(
     userId,
-    { isPrivate:isPrivate },
+    { isPrivate: isPrivate },
     { new: true }
   );
   return res.status(200).json({ isSuccess: !!updatedUser, updatedUser });

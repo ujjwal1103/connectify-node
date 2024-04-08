@@ -49,60 +49,136 @@ export const unfollowUser = asyncHandler(async (req, res) => {
 
 export const getFollowers = asyncHandler(async (req, res) => {
   const { userId } = req.params;
-  const { userId: currUserId } = req.user;
+  const { userId: currentUserId } = req.user;
+  const { username, page = 1, pageSize = 10 } = req.query;
+  const skipCount = (page - 1) * pageSize;
+  const sameUser = userId === currentUserId;
 
-  const sameUser = userId === currUserId;
+  const matchStage = {
+    $match: {
+      followeeId: new mongoose.Types.ObjectId(userId),
+    },
+  };
+
+  const usernameMatchStage = username
+    ? {
+        $lookup: {
+          from: "users",
+          let: { followerId: "$followerId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$_id", "$$followerId"] },
+                    {
+                      $regexMatch: {
+                        input: "$username",
+                        regex: `^${username}`,
+                        options: "i",
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+          ],
+          as: "followers",
+        },
+      }
+    : {
+        $lookup: {
+          from: "users",
+          localField: "followerId",
+          foreignField: "_id",
+          as: "followers",
+          pipeline: [
+            {
+              $lookup: {
+                from: "follows",
+                localField: "_id",
+                foreignField: "followerId",
+                as: "follow",
+                pipeline: [
+                  {
+                    $match: {
+                      followeeId: new mongoose.Types.ObjectId(currentUserId),
+                    },
+                  },
+                ],
+              },
+            },
+            {
+              $addFields: {
+                isFollow: {
+                  $cond: {
+                    if: {
+                      $gte: [
+                        {
+                          $size: "$follow",
+                        },
+                        1,
+                      ],
+                    },
+                    then: true,
+                    else: false,
+                  },
+                },
+              },
+            },
+
+            {
+              $project: {
+                _id: 1,
+                username: 1,
+                name: 1,
+                avatar: 1,
+                isFollow: 1,
+                follow: 1,
+              },
+            },
+          ],
+        },
+      };
 
   const followers = await Follow.aggregate([
+    matchStage,
+    usernameMatchStage,
     {
-      $match: {
-        followeeId: new mongoose.Types.ObjectId(userId),
+      $unwind: "$followers",
+    },
+    {
+      $project: {
+        _id: "$followers._id",
+        username: "$followers.username",
+        name: "$followers.name",
+        avatar: "$followers.avatar",
+        isFollow: "$followers.isFollow",
+        follow: "$followers.follow",
       },
-    },
-    {
-      $lookup: {
-        from: "users",
-        localField: "followerId",
-        foreignField: "_id",
-        as: "follower",
-        pipeline: [
-          {
-            $project: {
-              _id: 1,
-              username: 1,
-              avatar: 1,
-            },
-          },
-        ],
-      },
-    },
-    {
-      $unwind: "$follower",
-    },
-    {
-      $addFields: {},
     },
     {
       $addFields: {
-        isFollow: {
-          $eq: [new mongoose.Types.ObjectId(currUserId), "$followeeId"],
+        isCurrentUser: {
+          $eq: ["$_id", new mongoose.Types.ObjectId(currentUserId)],
         },
-        canRemove: sameUser,
       },
     },
-
     {
-      $project: {
-        _id: "$follower._id",
-        username: "$follower.username",
-        avatar: "$follower.avatar",
-        isFollow: "$isFollow",
-        canRemove: "$canRemove",
+      $sort: {
+        isCurrentUser: -1,
+        isFollow: -1,
       },
+    },
+    {
+      $skip: skipCount,
+    },
+    {
+      $limit: pageSize,
     },
   ]);
 
-  return res.status(200).json({ isSuccess: true, followers: [...followers] });
+  return res.status(200).json({ isSuccess: true, followers: [...followers],hasMore: followers.length > 0  });
 });
 
 export const getFollowing = asyncHandler(async (req, res) => {
@@ -167,6 +243,22 @@ export const getFollowing = asyncHandler(async (req, res) => {
               },
             },
             {
+              $lookup: {
+                from: "followrequests",
+                localField: "_id",
+                foreignField: "requestedTo",
+                as: "request",
+                pipeline: [
+                  {
+                    $match: {
+                      requestedBy: new mongoose.Types.ObjectId(currentUserId),
+                      requestStatus: "PENDING"
+                    },
+                  },
+                ],
+              },
+            },
+            {
               $addFields: {
                 isFollow: {
                   $cond: {
@@ -174,6 +266,20 @@ export const getFollowing = asyncHandler(async (req, res) => {
                       $gte: [
                         {
                           $size: "$follow",
+                        },
+                        1,
+                      ],
+                    },
+                    then: true,
+                    else: false,
+                  },
+                },
+                isRequested: {
+                  $cond: {
+                    if: {
+                      $gte: [
+                        {
+                          $size: "$request",
                         },
                         1,
                       ],
@@ -190,9 +296,10 @@ export const getFollowing = asyncHandler(async (req, res) => {
                 _id: 1,
                 username: 1,
                 name: 1,
-                avatar: 1,
                 isFollow: 1,
                 follow: 1,
+                isPrivate:1,
+                isRequested:1
               },
             },
           ],
@@ -210,9 +317,10 @@ export const getFollowing = asyncHandler(async (req, res) => {
         _id: "$following._id",
         username: "$following.username",
         name: "$following.name",
-        avatar: "$following.avatar",
         isFollow: "$following.isFollow",
         follow: "$following.follow",
+        isPrivate: '$following.isPrivate',
+        isRequested: '$following.isRequested'
       },
     },
     {
@@ -241,7 +349,10 @@ export const getFollowing = asyncHandler(async (req, res) => {
     .json({ isSuccess: true, followings, hasMore: followings.length > 0 });
 });
 
+
+//admin controller
 export const getAllFollowers = asyncHandler(async (req, res) => {
   const follows = await Follow.find().populate("followerId followeeId");
   return res.status(200).json({ follows });
 });
+

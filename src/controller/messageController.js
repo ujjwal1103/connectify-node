@@ -54,7 +54,7 @@ export const sendMessage = async (req, res) => {
     return res.status(200).json({
       isSuccess: true,
       chatId: chat,
-      message,
+      message:newMessage,
     });
   } catch (error) {
     return res.status(500).json({

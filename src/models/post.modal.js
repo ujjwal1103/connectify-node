@@ -1,6 +1,17 @@
 import mongoose from "mongoose";
 import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 
+const imageSchema = new mongoose.Schema({
+  url: {
+      type: String,
+      required: true
+  },
+  publicId: {
+      type: String,
+      required: true
+  }
+});
+
 const postSchema = new mongoose.Schema(
   {
     caption: {
@@ -15,6 +26,12 @@ const postSchema = new mongoose.Schema(
     imageUrl: [
       {
         type: String,
+        required: true,
+      },
+    ],
+    imageurlsPublicIds: [
+      {
+        type: imageSchema,
         required: true,
       },
     ],

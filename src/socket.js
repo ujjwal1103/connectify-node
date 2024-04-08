@@ -1,5 +1,5 @@
 import { io } from "./app.js";
-import { NEW_MESSAGE } from "./utils/constant.js";
+import { NEW_MESSAGE, SEEN_MESSAGES } from "./utils/constant.js";
 import { getSockets } from "./utils/index.js";
 
 const users = new Set();
@@ -50,6 +50,14 @@ export const runSocket = () => {
           const sockets = getSockets([data.to]);
          
           io.to(sockets).emit(NEW_MESSAGE, data);
+        }
+      });
+      
+      socket.on(SEEN_MESSAGES, (data) => {
+        if (data) {
+          const sockets = getSockets([data.to]);
+          console.log(data)
+          io.to(sockets).emit(SEEN_MESSAGES, data);
         }
       });
 
