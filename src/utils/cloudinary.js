@@ -15,25 +15,25 @@ const uploadOnCloudinary = async (localFilePath, folder) => {
   try {
     if (!localFilePath) return null;
     // Validate file type (only allow images)
-    const allowedExtensions = ["jpg", "jpeg", "png", "gif", "webp"]; // Add more if needed
-    const fileExtension = localFilePath.split(".").pop().toLowerCase();
-    if (!allowedExtensions.includes(fileExtension)) {
-      console.log(
-        "Invalid file type. Only images (jpg, jpeg, png, gif, webp) are allowed."
-      );
-      throw new ApiError(
-        404,
-        "Invalid file type. Only images (jpg, jpeg, png, gif, webp) are allowed."
-      );
-    }
+    // const allowedExtensions = ["jpg", "jpeg", "png", "gif", "webp"]; // Add more if needed
+    // const fileExtension = localFilePath.split(".").pop().toLowerCase();
+    // if (!allowedExtensions.includes(fileExtension)) {
+    //   console.log(
+    //     "Invalid file type. Only images (jpg, jpeg, png, gif, webp) are allowed."
+    //   );
+    //   throw new ApiError(
+    //     404,
+    //     "Invalid file type. Only images (jpg, jpeg, png, gif, webp) are allowed."
+    //   );
+    // }
     //upload the file on cloudinary
     const response = await cloudinary.uploader.upload(localFilePath, {
       folder: folder,
       resource_type: "auto",
+      use_filename:true
     });
     // file has been uploaded successfull
     fs.unlinkSync(localFilePath);
-    console.log(response)
     return response;
   } catch (error) {
     fs.unlinkSync(localFilePath);
@@ -52,17 +52,11 @@ const uploadMultipleOnCloudinary = async (localFilePaths = [], folder) => {
     });
 
     const uploadedUrls = await Promise.all(uploadPromises);
-    console.log(uploadedUrls);
     return uploadedUrls;
   } catch (error) {
     throw new ApiError(400, error.message);
   }
 };
-
-
-// http://res.cloudinary.com/dtzyaxndt/image/upload/v1712471612/65d0b8cbcf65c91cd0e0dc07/postImages/g5mtswr6fyb3ea7qcy5s.jpg
-
-
 
 const deleteFromCloudinary = async (publicIds = []) => {
   try {
@@ -87,9 +81,5 @@ const deleteMultipleFromCloudinary = async (publicIds = []) => {
     throw new Error(`Failed to delete multiple files from Cloudinary: ${error.message}`);
   }
 };
-
-
-
-
 
 export { uploadOnCloudinary, uploadMultipleOnCloudinary, deleteFromCloudinary, deleteMultipleFromCloudinary  };

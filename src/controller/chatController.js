@@ -69,11 +69,9 @@ export const createChat = asyncHandler(async (req, res) => {
     (member) => member._id.toString() !== userId
   );
 
-
-
   delete chat.members;
 
-  emitEvent(req, REFECTCH_CHATS, [friend._id] )
+  emitEvent(req, REFECTCH_CHATS, [friend._id]);
 
   return res.status(201).json({
     isSuccess: true,
@@ -203,10 +201,7 @@ export const deleteChatById = async (req, res) => {
     }
     const deletedMessages = await Message.deleteMany({ chat: chatId });
 
-
-    emitEvent(req, REFECTCH_CHATS, deletedChat.members )
-
-
+    emitEvent(req, REFECTCH_CHATS, deletedChat.members);
 
     return res.status(200).json({
       isSuccess: true,
@@ -219,3 +214,89 @@ export const deleteChatById = async (req, res) => {
     });
   }
 };
+
+export const chatUsers = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
+  const users = await User.aggregate([
+    {
+      $match: {
+        _id: { $ne: new mongoose.Types.ObjectId(userId) }, // Use $ne to exclude the given userId
+      },
+    },
+    {
+      $project: {
+        username: 1,
+        _id: 1,
+        name: 1,
+        avatar: 1,
+      },
+    },
+    {
+      $lookup: {
+        from: "chats",
+        localField: "_id",
+        foreignField: "members",
+        as: "chat",
+      },
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: "_id",
+        foreignField: "followerId",
+        as: "followers",
+        pipeline: [
+          {
+            $match: {
+              followeeId: new mongoose.Types.ObjectId(userId),
+            },
+          },
+        ],
+      },
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: "_id",
+        foreignField: "followeeId",
+        as: "following",
+        pipeline: [
+          {
+            $match: {
+              followerId: new mongoose.Types.ObjectId(userId),
+            },
+          },
+        ],
+      },
+    },
+    {
+      $match: {
+        $and: [
+          { $expr: { $eq: [{ $size: "$chat" }, 0] } }, // Exclude users with chats (chat array is empty)
+          {
+            $or: [
+              { $expr: { $gt: [{ $size: "$followers" }, 0] } }, // At least one follower
+              { $expr: { $gt: [{ $size: "$following" }, 0] } }, // At least one following
+            ],
+          },
+        ],
+  
+      },
+    },
+    {
+      $project: {
+        username: 1,
+        _id: 1,
+        name: 1,
+        avatar: 1,
+      },
+    },
+  ]);
+
+  return res.status(200).json({
+    data: users,
+    isSuccess: true,
+  });
+});
+
+// 6612496bcb4b79f1effde1ee

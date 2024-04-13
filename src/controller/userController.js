@@ -315,6 +315,7 @@ export const getUsers = asyncHandler(async (req, res) => {
         ],
       },
     },
+
     {
       $addFields: {
         isRequested: {
@@ -323,6 +324,11 @@ export const getUsers = asyncHandler(async (req, res) => {
             "$isRequested.requestedBy",
           ],
         },
+      },
+    },
+    {
+      $match: {
+        isRequested: false,
       },
     },
     {
@@ -451,8 +457,9 @@ export const updateProfilePicture = asyncHandler(async (req, res) => {
   const user = await User.findById(userId);
   if (!user) throw new ApiError(400, "User not found");
 
-  const resp = await uploadOnCloudinary(req.file.path, `${user?._id}/profilePictures`
-
+  const resp = await uploadOnCloudinary(
+    req.file.path,
+    `${user?._id}/profilePictures`
   );
 
   const avatar = resp.url;
@@ -460,7 +467,6 @@ export const updateProfilePicture = asyncHandler(async (req, res) => {
     url: resp.url,
     publicId: resp.public_id,
   };
-
 
   if (!avatar) throw new ApiError(400, "Failed to upload profile pIcture");
 

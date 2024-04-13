@@ -4,11 +4,14 @@ import Message from "../models/message.modal.js";
 import { emitEvent } from "../utils/index.js";
 import { SEEN_MESSAGES } from "../utils/constant.js";
 import asyncHandler from "../utils/asyncHandler.js";
+import { ApiError } from "../utils/ApiError.js";
+import { uploadMultipleOnCloudinary } from "../utils/cloudinary.js";
 
 export const sendMessage = async (req, res) => {
   const { userId: from } = req.user;
   const { chat } = req.params;
   const { text, messageType, to } = req.body;
+  if(!text)  throw new ApiError(404, "Empty message");
   try {
     const existingChat = await Chat.findById(chat);
 
@@ -34,6 +37,80 @@ export const sendMessage = async (req, res) => {
       from,
       text,
       messageType,
+      to,
+      chat,
+    });
+
+    // Update the "lastMessage" field in the chat
+    existingChat.lastMessage = newMessage;
+    await existingChat.save();
+
+    const message = newMessage.save();
+
+    // add this message as last message in the chat model
+    await Chat.findByIdAndUpdate(
+      { _id: chat },
+      { lastMessage: message._id },
+      { new: true }
+    );
+
+    return res.status(200).json({
+      isSuccess: true,
+      chatId: chat,
+      message:newMessage,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      error: error.message,
+      isSuccess: false,
+    });
+  }
+};
+export const sendAttachments = async (req, res) => {
+  const { userId: from } = req.user;
+  const { chat } = req.params;
+  const { messageType, to } = req.body;
+
+  try {
+    const existingChat = await Chat.findById(chat);
+
+    if (!existingChat) {
+      return res.status(404).json({
+        error: "Chat not found",
+        isSuccess: false,
+      });
+    }
+
+    // Check if the user sending the message is a participant in the chat
+    if (!existingChat.members.includes(from)) {
+      return res.status(403).json({
+        error: "You are not a participant in this chat",
+        isSuccess: false,
+      });
+    }
+
+
+    if (!req.files.length) {
+      throw new ApiError(404, "Files is required");
+    }
+  
+    const filePaths = req.files.map((f) => f.path);
+  
+    const attachmentsUrl = await uploadMultipleOnCloudinary(
+      filePaths,
+      `${from}/messagesAttachments`
+    );
+  
+    if (!attachmentsUrl || attachmentsUrl.length === 0) {
+      throw new ApiError(404, "Files are required");
+    }
+
+    // Create a new message
+    const newMessage = new Message({
+      from,
+      text:'',
+      messageType,
+      attachments:attachmentsUrl.map((im) => im.url),
       to,
       chat,
     });
@@ -107,12 +184,12 @@ export const getMessagesInChat = async (req, res) => {
       .limit(parseInt(pageSize))
       .exec();
 
-    if (page === 1) {
+    if (Number(page) === 1 && idsOnly?.length > 0 ) {
       emitEvent(
         req,
         SEEN_MESSAGES,
-        [messages[0]?.from, messages[0]?.to],
-        "test"
+        [messages[0]?.from, messages[0].to],
+        {chat, idsOnly}
       );
     }
 

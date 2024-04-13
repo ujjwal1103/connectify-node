@@ -466,11 +466,8 @@ export const deletePost = async (req, res) => {
       throw new ApiError(400, "INVALIDE POST ID");
     }
 
-    console.log(p);
-
     const publicIds = p.imageurlsPublicIds.map((i) => i.publicId);
     const deleteResult = await deleteMultipleFromCloudinary(publicIds);
-    console.log(deleteResult);
 
     if (!deleteResult) {
       return res.status(500).json({
@@ -482,7 +479,7 @@ export const deletePost = async (req, res) => {
 
     await Post.findByIdAndDelete(postId);
 
-    console.log(deleteResult);
+
     const { userId } = req.user;
     await User.findByIdAndUpdate(
       userId,

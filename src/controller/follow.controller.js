@@ -3,10 +3,52 @@ import { Follow } from "../models/follow.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { createNotification } from "./notificationController.js";
+import User from "../models/user.modal.js";
+import { FollowRequest } from "../models/followRequest.modal.js";
+import { emitEvent } from "../utils/index.js";
+import { NEW_REQUEST } from "../utils/constant.js";
 
 export const followUser = asyncHandler(async (req, res) => {
   const { userId: followerId } = req.user;
   const { followeeId } = req.params;
+
+  if (followerId === followeeId) {
+    throw new ApiError(400, "You cannot follow yourself");
+  }
+
+  const followee = await User.findById(followeeId);
+
+  if (!followee) {
+    throw new ApiError(404, "User to be followed does not exist");
+  }
+
+  if (followee.isPrivate) {
+    const existingFollowRequest = await FollowRequest.findOne({
+      requestedBy:followerId,
+      requestedTo:followeeId,
+    });
+  
+    if (existingFollowRequest) {
+      throw new ApiError(409, "Request Already Sent",{isRequested: true});
+    }
+  
+    const followRequest = await FollowRequest.create({
+      requestedBy:followerId,
+      requestedTo:followeeId,
+    });
+  
+    const resp = await createNotification({
+      from: followerId,
+      text: "Requested to follow you",
+      to: followeeId,
+      type: "FOLLOW_RESQUEST_SENT",
+      requestId: followRequest._id,
+    });
+  
+    emitEvent(req, NEW_REQUEST, [followeeId], resp);
+
+    return res.status(200).json({ requested: true, followRequest });
+  }
 
   const existingFollow = await Follow.findOne({ followerId, followeeId });
 
@@ -23,13 +65,15 @@ export const followUser = asyncHandler(async (req, res) => {
 
   const notifObj = {
     from: followerId,
-    text: "started following you",
+    text: "Started following you",
     to: followeeId,
     type: "FOLLOWING",
     followId: rsp._id,
   };
 
   const resp = await createNotification(notifObj);
+
+  emitEvent(req, "FOLLOWING", [followeeId, followerId], resp);
 
   return res.status(200).json({ follow: true, result: rsp });
 });

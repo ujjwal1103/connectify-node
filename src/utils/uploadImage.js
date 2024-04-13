@@ -29,15 +29,12 @@ export const uploadImage = async (filename, foldername) => {
 export const uploadImages = async (filenames, foldername) => {
 try {
   const downloadURLs = [];
-  console.log(filenames)
   for (const filename of filenames) {
     const storageRef = ref(storage, `${foldername}/${filename}`);
     const fileData = await fsPromises.readFile(`public/images/${filename}`);
-    console.log("filehai",fileData, filename)
+
     const fileUint8Array = new Uint8Array(fileData);
-    console.log("filehai2",fileUint8Array, filename)
     const snapshot = await uploadBytes(storageRef, fileUint8Array);
-    console.log(snapshot, 'upload ke bad')
     const downloadURL = await getDownloadURL(snapshot.ref);
     if (downloadURL) {
       await fsPromises.unlink(`public/images/${filename}`);

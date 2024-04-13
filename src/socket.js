@@ -48,7 +48,6 @@ export const runSocket = () => {
        
         if (data) {
           const sockets = getSockets([data.to]);
-         
           io.to(sockets).emit(NEW_MESSAGE, data);
         }
       });
@@ -56,7 +55,7 @@ export const runSocket = () => {
       socket.on(SEEN_MESSAGES, (data) => {
         if (data) {
           const sockets = getSockets([data.to]);
-          console.log(data)
+         
           io.to(sockets).emit(SEEN_MESSAGES, data);
         }
       });

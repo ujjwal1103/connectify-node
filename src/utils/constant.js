@@ -5,3 +5,11 @@ export const ACCEPT_REQUEST = "ACCEPT_REQUEST"
 export const LIKE_POST = "LIKE_POST"
 export const SEEN_MESSAGES = "SEEN_MESSAGES"
 export const REFECTCH_CHATS = "REFECTCH_CHATS"
+
+
+
+
+
+
+// regex
+export const USERNAME_REGEX =  /^(?=[a-z_])[a-z0-9_]{5,20}$/;
