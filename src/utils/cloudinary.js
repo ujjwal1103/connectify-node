@@ -45,8 +45,9 @@ const uploadMultipleOnCloudinary = async (localFilePaths = [], folder) => {
   try {
     const uploadPromises = localFilePaths.map(async (path) => {
       const res = await uploadOnCloudinary(path, folder);
+      console.log(res)
       return {
-        url: res.url,
+        url: res.secure_url,
         publicId: res.public_id
       }
     });
