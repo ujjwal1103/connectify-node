@@ -10,7 +10,7 @@ import { promises as fsPromises } from 'fs';
 import {v2 as cloudinary} from 'cloudinary';
           
 cloudinary.config({ 
-  cloud_name: 'dtzyaxndt', 
+  cloud_name: ' ', 
   api_key: '355669528939713', 
   api_secret: '3UPOW7j-JmdW32kysbr_5u_sOBc' 
 });

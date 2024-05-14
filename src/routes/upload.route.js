@@ -11,7 +11,12 @@ const router = express.Router();
 
 router.post(
   "/admin/uploadImage",
-  upload.single("image"),
+  upload.single("file"),
+  uploadImageToFirebase
+);
+router.post(
+  "/uploadFile",
+  upload.single("file"),
   uploadImageToFirebase
 );
 router.get("/admin/images/:foldername", getAllImagesFromStorage);

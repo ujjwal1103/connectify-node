@@ -6,15 +6,20 @@ import asyncHandler from "./../utils/asyncHandler.js";
 import { ApiError } from "./../utils/ApiError.js";
 import { deleteImage } from "../utils/uploadImage.js";
 import mongoose from "mongoose";
-
 import { users } from "../userdata.js";
 import Post from "../models/post.modal.js";
 import { Follow } from "../models/follow.model.js";
-import { getObjectId } from "../utils/index.js";
+import { getMongoosePaginationOptions, getObjectId } from "../utils/index.js";
+
 import {
   deleteFromCloudinary,
   uploadOnCloudinary,
 } from "../utils/cloudinary.js";
+
+const options = {
+  httpOnly: true,
+  secure: true,
+};
 
 const generateAccessAndRefreshTokens = async (userId) => {
   try {
@@ -37,9 +42,11 @@ const generateAccessAndRefreshTokens = async (userId) => {
 };
 
 export const registerUser = asyncHandler(async (req, res) => {
-  const { username, password, email } = req.body;
+  const { username, password, email, name } = req.body;
   if (
-    [username, password, email].some((feild) => !feild || feild.trim() === "")
+    [username, password, email, name].some(
+      (feild) => !feild || feild.trim() === ""
+    )
   ) {
     throw new ApiError(400, "All feilds are required");
   }
@@ -57,16 +64,32 @@ export const registerUser = asyncHandler(async (req, res) => {
   const salt = bcrypt.genSaltSync(10);
   const hash = bcrypt.hashSync(password, salt);
 
-  const user = await User.create({
+  await User.create({
     email,
     password: hash,
+    name,
     username: username.toLowerCase(),
   });
 
-  return res.status(201).json({
-    isSuccess: true,
-    message: `Welcome To connectify : ${user.username}`,
-  });
+  const user = await User.findOne({ username: username?.toLowerCase() })
+    .select("username email name")
+    .lean();
+
+  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+    user?._id
+  );
+
+  return res
+    .status(201)
+    .cookie("accessToken", accessToken, options)
+    .cookie("refreshToken", refreshToken, options)
+    .json({
+      user,
+      isSuccess: true,
+      message: `Welcome To connectify : ${user.username}`,
+      accessToken: accessToken,
+      refreshToken: refreshToken,
+    });
 });
 
 export const loginUser = asyncHandler(async (req, res) => {
@@ -87,11 +110,6 @@ export const loginUser = asyncHandler(async (req, res) => {
   );
   delete user.password;
   delete user?.refreshToken;
-
-  const options = {
-    httpOnly: true,
-    secure: true,
-  };
 
   return res
     .status(201)
@@ -271,12 +289,10 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
 
 export const getUsers = asyncHandler(async (req, res) => {
   const { userId } = req.user;
-  const page = req.query.page || 1; // Default to page 1 if not provided
-  const limit = +req.query.limit || 10; // Default limit to 10 if not provided
+  const page = req.query.page || 1;
+  const limit = +req.query.limit || 10;
 
-  const skip = (page - 1) * limit;
-
-  const users = await User.aggregate([
+  const usersAggregate = User.aggregate([
     {
       $match: {
         _id: { $ne: new mongoose.Types.ObjectId(userId) },
@@ -315,7 +331,6 @@ export const getUsers = asyncHandler(async (req, res) => {
         ],
       },
     },
-
     {
       $addFields: {
         isRequested: {
@@ -331,29 +346,19 @@ export const getUsers = asyncHandler(async (req, res) => {
         isRequested: false,
       },
     },
-    {
-      $skip: skip,
-    },
-    {
-      $limit: limit,
-    },
   ]);
 
-  const totalCount = await User.countDocuments({
-    _id: { $ne: new mongoose.Types.ObjectId(userId) },
-  });
+  const usersPagination = await User.aggregatePaginate(
+    usersAggregate,
+    getMongoosePaginationOptions({
+      limit,
+      page,
+      customLabels: { docs: "users" },
+    })
+  );
 
-  const totalPages = Math.ceil(totalCount / limit);
-  const hasMore = page < totalPages;
   return res.status(200).json({
-    users: users,
-    pagination: {
-      currentPage: page,
-      totalPages: totalPages,
-      totalUsers: totalCount,
-      perPage: limit,
-      hasMore,
-    },
+    ...usersPagination,
     isSuccess: true,
   });
 });
@@ -390,34 +395,19 @@ export const getFriends = asyncHandler(async (req, res) => {
   });
 });
 
-export const deleteUser = async (req, res) => {
+export const deleteUser = asyncHandler(async (req, res) => {
   const { userId } = req.user;
-  try {
-    const user = await User.findOne({ _id: userId });
-    if (!user) {
-      return res.status(404).json({
-        isSuccess: false,
-        message: "User not found",
-      });
-    }
-    const result = await User.deleteOne({ _id: userId });
-
-    return res.status(200).json({
-      result: result,
-      isSuccess: true,
-      message: "User deleted successfully",
-    });
-  } catch (error) {
-    console.error(error);
-    return res.status(500).json({
-      isSuccess: false,
-      errorName: error.name,
-      errorMessage: error.message,
-      error: "Internal server error",
-      message: "Something went wrong",
-    });
+  const user = await User.findOne({ _id: userId });
+  if (!user) {
+    throw new ApiError(404, "User Not Found");
   }
-};
+  const deletedUser = await User.deleteOne({ _id: userId });
+  return res.status(200).json({
+    result: deletedUser,
+    isSuccess: true,
+    message: "User deleted successfully",
+  });
+});
 
 export const editUser = asyncHandler(async (req, res) => {
   const { userId } = req.user;
@@ -426,7 +416,7 @@ export const editUser = asyncHandler(async (req, res) => {
   const user = await User.findById(userId);
 
   if (!user) {
-    throw ApiError(400, "User not found");
+    throw new ApiError(400, "User not found");
   }
 
   if (user) {
@@ -552,15 +542,13 @@ const getGoogleAuthToken = async (code) => {
   }
 };
 
-export const googleAuthentication = async (req, res) => {
+export const googleAuthentication = asyncHandler(async (req, res) => {
   const { code } = req.query;
-
-  try {
-    return res.redirect(process.env.REACT_REDIRECT_URI + code);
-  } catch (error) {
-    return res.status(404).json({ message: "something went wrong" });
+  if (!code) {
+    throw new ApiError(404, "Invalide Authentication");
   }
-};
+  return res.redirect(process.env.REACT_REDIRECT_URI + code);
+});
 
 export async function getGoogleUser({ id_token, access_token }) {
   try {
@@ -580,27 +568,23 @@ export async function getGoogleUser({ id_token, access_token }) {
   }
 }
 
-export const googleAuthenticate = async (req, res) => {
+export const googleAuthenticate = asyncHandler(async (req, res) => {
   const { code } = req.query;
 
-  try {
-    const { id_token, access_token } = await getGoogleAuthToken(code);
+  const { id_token, access_token } = await getGoogleAuthToken(code);
 
-    const googleUser = await getGoogleUser({ id_token, access_token });
+  const googleUser = await getGoogleUser({ id_token, access_token });
 
-    if (!googleUser.verified_email) {
-      return res.status(403).send("Google account is not verified");
-    }
-
-    const existingUser = await User.findOne({ email: googleUser.email });
-
-    return res
-      .status(201)
-      .json({ isSuccess: true, user: googleUser, existingUser: existingUser });
-  } catch (error) {
-    return res.status(404).json({ message: "something went wrong" });
+  if (!googleUser.verified_email) {
+    return res.status(403).send("Google account is not verified");
   }
-};
+
+  const existingUser = await User.findOne({ email: googleUser.email });
+
+  return res
+    .status(201)
+    .json({ isSuccess: true, user: googleUser, existingUser: existingUser });
+});
 
 export const makeAccountPrivate = asyncHandler(async (req, res) => {
   const { userId } = req.user;
@@ -797,5 +781,97 @@ export const deleteUserById = asyncHandler(async (req, res) => {
     deletedFollow,
     deletedFollowing,
     message: "users deleted successfully",
+  });
+});
+
+export const getSendUsers = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
+  const { search } = req.query;
+  let users = [];
+
+  if (!search) {
+    users = await User.aggregate([
+      {
+        $match: {
+          _id: { $ne: new mongoose.Types.ObjectId(userId) }, // Use $ne to exclude the given userId
+        },
+      },
+      {
+        $project: {
+          username: 1,
+          _id: 1,
+          name: 1,
+          avatar: 1,
+        },
+      },
+      {
+        $lookup: {
+          from: "follows",
+          localField: "_id",
+          foreignField: "followerId",
+          as: "followers",
+          pipeline: [
+            {
+              $match: {
+                followeeId: new mongoose.Types.ObjectId(userId),
+              },
+            },
+          ],
+        },
+      },
+      {
+        $lookup: {
+          from: "follows",
+          localField: "_id",
+          foreignField: "followeeId",
+          as: "following",
+          pipeline: [
+            {
+              $match: {
+                followerId: new mongoose.Types.ObjectId(userId),
+              },
+            },
+          ],
+        },
+      },
+      {
+        $match: {
+          $or: [
+            { $expr: { $gt: [{ $size: "$followers" }, 0] } }, // At least one follower
+            { $expr: { $gt: [{ $size: "$following" }, 0] } }, // At least one following
+          ],
+        },
+      },
+      {
+        $project: {
+          username: 1,
+          _id: 1,
+          name: 1,
+          avatar: 1,
+        },
+      },
+    ]);
+  } else {
+    users = await User.aggregate([
+      {
+        $match: {
+          _id: { $ne: new mongoose.Types.ObjectId(userId) },
+          username: { $regex: `^${search}`, $options: "i" },
+        },
+      },
+      {
+        $project: {
+          username: 1,
+          _id: 1,
+          name: 1,
+          avatar: 1,
+        },
+      },
+    ]);
+  }
+
+  return res.status(200).json({
+    data: users,
+    isSuccess: true,
   });
 });

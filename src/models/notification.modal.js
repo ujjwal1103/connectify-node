@@ -27,6 +27,7 @@ const notificationSchema = new mongoose.Schema(
         "FOLLOW_RESQUEST_SENT",
         "FOLLOW_REQUEST_ACCEPTED",
         "FOLLOWING",
+        "COMMENT_POST"
       ],
     },
     postId: {

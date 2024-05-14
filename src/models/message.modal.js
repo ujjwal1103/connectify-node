@@ -8,7 +8,7 @@ const messageSchema = new mongoose.Schema(
     messageType: {
       type: String,
       default: "TEXT_MESSAGE",
-      enum: ["TEXT_MESSAGE", "AUDIO", "IMAGE", "VIDEO", "VOICE_MESSAGE"],
+      enum: ["TEXT_MESSAGE", "AUDIO", "IMAGE", "VIDEO", "VOICE_MESSAGE","POST_MESSAGE"],
     },
     attachments: {
       type: [String],
@@ -27,6 +27,11 @@ const messageSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "Chat",
       required: true,
+      index:true,
+    },
+    post: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Post",
     },
     seen: {
       type: Boolean,

@@ -81,8 +81,9 @@ export const createChat = asyncHandler(async (req, res) => {
 
 export const getAllChats = async (req, res) => {
   const { userId } = req.user;
+  const { search } = req.query;
   try {
-    const aggrigatedChats = await Chat.aggregate([
+    let pipeline = [
       {
         $match: {
           members: { $in: [new mongoose.Types.ObjectId(userId)] },
@@ -90,7 +91,7 @@ export const getAllChats = async (req, res) => {
       },
       {
         $lookup: {
-          from: "users", // Assuming "users" is the collection for user details
+          from: "users",
           localField: "members",
           foreignField: "_id",
           as: "members",
@@ -107,7 +108,7 @@ export const getAllChats = async (req, res) => {
       },
       {
         $lookup: {
-          from: "messages", // Assuming "users" is the collection for user details
+          from: "messages",
           localField: "lastMessage",
           foreignField: "_id",
           as: "lastMessage",
@@ -141,15 +142,22 @@ export const getAllChats = async (req, res) => {
         },
       },
       {
+        $match: {
+          "friend.username": { $regex: search || "", $options: "i" },
+        },
+      },
+      {
         $project: {
           members: 0,
-          __v: 0, // Remove the membersDetails field after adding the friend field
+          __v: 0,
         },
       },
       {
         $sort: { updatedAt: -1 },
       },
-    ]);
+    ];
+
+    const aggrigatedChats = await Chat.aggregate(pipeline);
 
     return res.status(201).json({
       isSuccess: true,
@@ -280,7 +288,6 @@ export const chatUsers = asyncHandler(async (req, res) => {
             ],
           },
         ],
-  
       },
     },
     {

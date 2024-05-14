@@ -2,7 +2,6 @@ import mongoose from "mongoose";
 import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 import { AvailableSocialLogins, UserLoginType } from "../constants/index.js";
 import jwt from "jsonwebtoken";
-import { uploadString } from "firebase/storage";
 
 const imageSchema = new mongoose.Schema({
   url: {
@@ -14,6 +13,7 @@ const imageSchema = new mongoose.Schema({
       required: true
   }
 });
+
 const userSchema = new mongoose.Schema(
   {
     username: {
@@ -79,6 +79,7 @@ const userSchema = new mongoose.Schema(
     },
     name: {
       type: String,
+      trim: true,
     },
     isPrivate: {
       type: Boolean,

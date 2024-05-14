@@ -9,6 +9,11 @@ const imageSchema = new mongoose.Schema({
   publicId: {
       type: String,
       required: true
+  },
+  type:{
+    type: String,
+    default: 'IMAGE',
+    enum:["VIDEO","IMAGE"]
   }
 });
 
@@ -23,13 +28,12 @@ const postSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
-    imageUrl: [
-      {
-        type: String,
-        required: true,
-      },
-    ],
-    imageurlsPublicIds: [
+    postType: {
+      type:String,
+      default: "POST",
+      enum:["POST","REEL"]
+    },
+    images: [
       {
         type: imageSchema,
         required: true,
@@ -39,6 +43,7 @@ const postSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index:true,
     },
   },
   { timestamps: true }
