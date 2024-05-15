@@ -9,13 +9,16 @@ import {
 import { storage } from "../firebase.config.js";
 import { ApiError } from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
-import { uploadImage } from "../utils/uploadImage.js";
-
+import {
+  uploadOnCloudinary,
+  uploadVideoCloudinary,
+} from "../utils/cloudinary.js";
 
 export const uploadImageToFirebase = asyncHandler(async (req, res) => {
-  const imageUrl = await uploadImage(req.file.originalname, "uploads");
-  if (!imageUrl) throw new ApiError(400, "Failed to Upload Image");
-  return res.status(200).json({ url: imageUrl });
+  console.log(req.file.mimetype, req.file.mimetype.includes("video"));
+  const file = await uploadVideoCloudinary(req.file.path, "videos");
+  if (!file) throw new ApiError(400, "Failed to Upload Image");
+  return res.status(200).json({ file: file });
 });
 
 export const deleteImageFromStorage = asyncHandler(async (req, res) => {
@@ -29,7 +32,7 @@ export const getAllImagesFromStorage = asyncHandler(async (req, res) => {
   const storageRef = ref(storage, foldername);
   const options = {
     maxResults: parseInt(3),
-    pageToken: 1, 
+    pageToken: 1,
   };
   const items = await list(storageRef, options);
 

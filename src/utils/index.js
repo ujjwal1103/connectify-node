@@ -1,5 +1,6 @@
 import mongoose from "mongoose";
 import { userSocketIDs } from "../socket.js";
+import { myCustomLabels } from "./constant.js";
 
 export function formatDateDifference(date) {
   const now = new Date();
@@ -37,9 +38,21 @@ export const getSockets = (users = []) => {
 };
 
 export const emitEvent = (req, event, users, data) => {
-
   const io = req.app.get("io");
   const sockets = getSockets(users);
- 
+
   io.to(sockets).emit(event, data);
+};
+
+export const getMongoosePaginationOptions = ({
+  page = 1,
+  limit = 10,
+  customLabels,
+}) => {
+  return {
+    page: Math.max(page, 1),
+    limit: Math.max(limit, 1),
+    pagination: true,
+    customLabels: { ...myCustomLabels, ...customLabels },
+  };
 };

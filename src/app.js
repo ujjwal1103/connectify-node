@@ -21,8 +21,8 @@ import asyncHandler from "./utils/asyncHandler.js";
 import { verifyToken } from "./middleware/index.js";
 import { Server } from "socket.io";
 import rateLimit from "express-rate-limit";
-import { addOrUpdateUser } from "./socket.js";
 import User from "./models/user.modal.js";
+import { userSocketIDs } from "./socket.js";
 
 dotenv.config({
   path: "./.env",
@@ -59,12 +59,12 @@ app.use(express.json({ limit: "16kb" }));
 app.use(express.urlencoded({ extended: true, limit: "16kb" }));
 app.use(
   cors({
-    origin: '*',
+    origin: "*",
     credentials: true,
   })
 );
 app.set("Connection", "keep-alive");
-app.set('io',io)
+app.set("io", io);
 app.use(cookieParser());
 app.use(express.static("public"));
 
@@ -87,12 +87,25 @@ app.get(
     return res.status(200).json({ isValid: true });
   })
 );
+
 app.get(
   "/api/healthCheck",
-
   asyncHandler((req, res) => {
     const date = new Date();
     return res.status(200).json({ success: true, date: new Date() });
+  })
+);
+
+app.get(
+  "/api/isOnline/:userId",
+  asyncHandler((req, res) => {
+    const { userId } = req.params;
+    console.log(userSocketIDs)
+    const isOnline = !!userSocketIDs.get(userId);
+    console.log(isOnline)
+    return res
+      .status(200)
+      .json({ success: true, isOnline, user: userSocketIDs.get(userId) });
   })
 );
 
@@ -120,11 +133,11 @@ app.get("", (_, res) => {
   res.send(htmlContent);
 });
 
-
-
-io.use(async(socket, next) => {
+io.use(async (socket, next) => {
   if (socket.handshake.auth?.userId) {
-    const user = await User.findById(socket.handshake.auth?.userId).select('username _id avatar');
+    const user = await User.findById(socket.handshake.auth?.userId).select(
+      "username _id avatar"
+    );
     socket.user = user;
     next();
   }

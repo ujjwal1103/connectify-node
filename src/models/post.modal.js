@@ -1,6 +1,22 @@
 import mongoose from "mongoose";
 import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
 
+const imageSchema = new mongoose.Schema({
+  url: {
+      type: String,
+      required: true
+  },
+  publicId: {
+      type: String,
+      required: true
+  },
+  type:{
+    type: String,
+    default: 'IMAGE',
+    enum:["VIDEO","IMAGE"]
+  }
+});
+
 const postSchema = new mongoose.Schema(
   {
     caption: {
@@ -12,9 +28,14 @@ const postSchema = new mongoose.Schema(
       trim: true,
       lowercase: true,
     },
-    imageUrl: [
+    postType: {
+      type:String,
+      default: "POST",
+      enum:["POST","REEL"]
+    },
+    images: [
       {
-        type: String,
+        type: imageSchema,
         required: true,
       },
     ],
@@ -22,6 +43,7 @@ const postSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       required: true,
+      index:true,
     },
   },
   { timestamps: true }

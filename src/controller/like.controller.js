@@ -4,7 +4,7 @@ import { ApiError } from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { createNotification } from "./notificationController.js";
 import { emitEvent } from "../utils/index.js";
-import { LIKE_POST } from "../utils/constant.js";
+import { COMMENT_POST, LIKE_POST } from "../utils/constant.js";
 
 const like = asyncHandler(async (req, res) => {
   const { postId, commentId, postUserId } = req.body;
@@ -36,13 +36,14 @@ const like = asyncHandler(async (req, res) => {
 
   const resp = await createNotification({
     from: userId,
-    text: "Liked your post",
+    text: postId ? "Liked your post" : "Commented on your post",
     to: postUserId,
-    type: "LIKE_POST",
+    type: postId ? LIKE_POST : COMMENT_POST,
     postId: postId,
+    commentId: commentId,
   });
 
-  emitEvent(req, LIKE_POST, [postUserId], liked);
+  emitEvent(req, postId ? LIKE_POST : COMMENT_POST, [postUserId], liked);
 
   res.status(200).json({
     liked: liked,

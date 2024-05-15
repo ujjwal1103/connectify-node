@@ -2,76 +2,16 @@ import mongoose from "mongoose";
 import Post from "../models/post.modal.js";
 import User from "../models/user.modal.js";
 import { ApiError } from "../utils/ApiError.js";
-import { deleteImage, uploadImage } from "../utils/uploadImage.js";
 import asyncHandler from "./../utils/asyncHandler.js";
-
-const postCommonAggregation = (req) => {
-  return [
-    {
-      $lookup: {
-        from: "comments",
-        localField: "_id",
-        foreignField: "postId",
-        as: "comments",
-      },
-    },
-    {
-      $lookup: {
-        from: "likes",
-        localField: "_id",
-        foreignField: "postId",
-        as: "likes",
-      },
-    },
-    {
-      $lookup: {
-        from: "likes",
-        localField: "_id",
-        foreignField: "postId",
-        as: "isLiked",
-        pipeline: [
-          {
-            $match: {
-              likedBy: new mongoose.Types.ObjectId(req.user?.userId),
-            },
-          },
-        ],
-      },
-    },
-    {
-      $lookup: {
-        from: "users",
-        localField: "_id",
-        foreignField: "userId",
-        as: "user",
-      },
-    },
-    {
-      $addFields: {
-        user: { $first: "$user" },
-        likes: { $size: "$likes" },
-        comments: { $size: "$comments" },
-        isLiked: {
-          $cond: {
-            if: {
-              $gte: [
-                {
-                  $size: "$isLiked",
-                },
-                1,
-              ],
-            },
-            then: true,
-            else: false,
-          },
-        },
-      },
-    },
-  ];
-};
+import {
+  uploadMultipleOnCloudinary,
+  deleteMultipleFromCloudinary,
+} from "../utils/cloudinary.js";
+import { getMongoosePaginationOptions } from "../utils/index.js";
 
 export const createPost = asyncHandler(async (req, res) => {
-  let { caption } = req.body;
+  const { userId } = req.user;
+  let { caption, aspectRatio } = req.body;
 
   let hashtagMatches;
   let hashtags;
@@ -83,16 +23,29 @@ export const createPost = asyncHandler(async (req, res) => {
       : [];
   }
 
-  if (!req.file) {
+  if (!req.files.length) {
     throw new ApiError(404, "Image is required");
   }
 
-  const imageUrl = await uploadImage(req.file.originalname, "posts");
+  const files = req.files.map((f) => ({
+    path: f.path,
+    isVideo: f.mimetype.includes("video"),
+    aspectRatio,
+  }));
+
+  const images = await uploadMultipleOnCloudinary(
+    files,
+    `${userId}/postImages`
+  );
+
+  if (!images || images.length === 0) {
+    throw new ApiError(404, "Images are required");
+  }
   const newPost = {
     caption,
-    imageUrl,
+    images,
     hashtags,
-    userId: req.user.userId,
+    userId: userId,
   };
   let post = new Post(newPost);
   post = await post.save();
@@ -140,9 +93,10 @@ export const createPost = asyncHandler(async (req, res) => {
 export const fetchAllPosts = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const page = parseInt(req.query.page) || 1;
-  const perPage = 3; // Number of posts per page
+  const perPage = 6; // Number of posts per page
   const Id = new mongoose.Types.ObjectId(userId);
-  const posts = await Post.aggregate([
+
+  const postAggregation = [
     {
       $sort: { updatedAt: -1 },
     },
@@ -177,6 +131,21 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
             },
           },
           {
+            $lookup: {
+              from: "followrequests",
+              localField: "_id",
+              foreignField: "requestedTo",
+              as: "isFollow",
+              pipeline: [
+                {
+                  $match: {
+                    requestedBy: Id,
+                  },
+                },
+              ],
+            },
+          },
+          {
             $addFields: {
               isFollow: {
                 $cond: {
@@ -199,10 +168,13 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
               showPost: {
                 $cond: {
                   if: {
-                    $eq: ["$isFollow", "$isPrivate"],
+                    $or: [
+                      { $eq: ["$_id", Id] }, // Logged-in user is the author
+                      { $eq: ["$isFollow", "$isPrivate"] }, // Follower can see private posts
+                    ],
                   },
                   then: true,
-                  else: { $not: "$isPrivate" },
+                  else: { $not: "$isPrivate" }, // Non-private posts are always visible
                 },
               },
             },
@@ -220,6 +192,10 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
         },
       },
     },
+  ];
+
+  const posts = Post.aggregate([
+    ...postAggregation,
     {
       $lookup: {
         from: "likes",
@@ -237,43 +213,33 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
       },
     },
     {
-      $skip: (page - 1) * perPage,
-    },
-    {
-      $limit: perPage,
+      $sort: {
+        isLiked: 1,
+      },
     },
   ]);
 
-  const totalPosts = await Post.countDocuments();
-  const totalPages = Math.ceil(totalPosts / perPage);
+  const paginatedPosts = await Post.aggregatePaginate(
+    posts,
+    getMongoosePaginationOptions({
+      limit: perPage,
+      page: page,
+      customLabels: { docs: "posts" },
+    })
+  );
 
   return res.status(200).json({
-    posts,
-    totalPages,
-    currentPage: page,
-    totalPosts,
-    hasNext: page !== totalPages && posts.length > 0,
     isSuccess: true,
+    ...paginatedPosts,
   });
 });
 
-export const fetchAllPostsByUser = async (req, res) => {
+export const fetchAllPostsByUser = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 3;
-  const totalPosts = await Post.countDocuments({ userId });
 
-  const skip = (page - 1) * limit;
-
-  const paginationObject = {
-    totalPosts,
-    skip,
-    hasNext: page * limit < totalPosts,
-    totalPages: Math.ceil(totalPosts / limit),
-    currentPage: parseInt(page),
-  };
-
-  const posts = await Post.aggregate([
+  const postsAggregate = Post.aggregate([
     {
       $match: {
         userId: new mongoose.Types.ObjectId(userId),
@@ -281,12 +247,6 @@ export const fetchAllPostsByUser = async (req, res) => {
     },
     {
       $sort: { updatedAt: -1 },
-    },
-    {
-      $skip: skip,
-    },
-    {
-      $limit: limit,
     },
     {
       $lookup: {
@@ -324,39 +284,23 @@ export const fetchAllPostsByUser = async (req, res) => {
     },
   ]);
 
-  return res.status(200).json({ posts, isSuccess: true, ...paginationObject });
-};
+  const postsPaginated = await Post.aggregatePaginate(
+    postsAggregate,
+    getMongoosePaginationOptions({
+      limit,
+      page,
+      customLabels: { docs: "posts" },
+    })
+  );
+
+  return res.status(200).json({ ...postsPaginated, isSuccess: true });
+});
 
 export const fetchAllPostsByUserId = asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { userId: currUserId } = req.user;
 
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 6;
-
-  const allPosts = await Post.aggregate([
-    {
-      $match: {
-        userId: new mongoose.Types.ObjectId(userId),
-      },
-    },
-    {
-      $count: "totalPosts",
-    },
-  ]);
-
-  const totalPosts = allPosts[0]?.totalPosts;
-  const skip = (page - 1) * limit;
-
-  const paginationObject = {
-    totalPosts,
-    skip,
-    hasNext: page * limit < totalPosts,
-    totalPages: Math.ceil(totalPosts / limit),
-    currentPage: parseInt(page),
-  };
-
-  const posts = await Post.aggregate([
+  const postsAggregate = Post.aggregate([
     {
       $match: {
         userId: new mongoose.Types.ObjectId(userId),
@@ -364,12 +308,6 @@ export const fetchAllPostsByUserId = asyncHandler(async (req, res) => {
     },
     {
       $sort: { updatedAt: -1 },
-    },
-    {
-      $skip: skip,
-    },
-    {
-      $limit: limit,
     },
     {
       $lookup: {
@@ -407,41 +345,37 @@ export const fetchAllPostsByUserId = asyncHandler(async (req, res) => {
     },
   ]);
 
-  return res.status(200).json({ posts, isSuccess: true, ...paginationObject });
+  const postsPaginated = await Post.aggregatePaginate(
+    postsAggregate,
+    getMongoosePaginationOptions({
+      limit,
+      page,
+      customLabels: { docs: "posts" },
+    })
+  );
+
+  return res.status(200).json({ ...postsPaginated, isSuccess: true });
 });
 
-export const deletePost = async (req, res) => {
+export const deletePost = asyncHandler(async (req, res) => {
   const { postId } = req.params;
-
-  try {
-    const p = await Post.findById(postId);
-    await Post.findByIdAndDelete(postId);
-    await deleteImage(p.imageUrl);
-    const { userId } = req.user;
-    await User.findByIdAndUpdate(
-      userId,
-      { $pull: { posts: postId } }, // Remove postId from the user's posts array
-      { new: true }
-    );
-
-    return res.status(200).json({
-      message: "post deleted successfully",
-      isSuccess: true,
-    });
-  } catch (error) {
-    return res.status(500).json({
-      error: error,
-      message: error.message || "Internal server error",
-      isSuccess: false,
-    });
+  const post = await Post.findById(postId);
+  if (!post) {
+    throw new ApiError(400, "INVALIDE POST ID");
   }
-};
+  const publicIds = post.images.map((i) => i.publicId);
+  await deleteMultipleFromCloudinary(publicIds);
+  await Post.findByIdAndDelete(postId);
+  return res.status(200).json({
+    message: "Post deleted successfully",
+    isSuccess: true,
+  });
+});
 
 export const getSinglePost = asyncHandler(async (req, res) => {
   const { postId } = req.params;
-  const { userId } = req.user;
+  const { userId } = req.user;;
   const Id = new mongoose.Types.ObjectId(userId);
-
   const p = await Post.aggregate([
     {
       $match: { _id: new mongoose.Types.ObjectId(postId) },
@@ -494,31 +428,11 @@ export const getSinglePost = asyncHandler(async (req, res) => {
               },
             },
           },
-          {
-            $addFields: {
-              showPost: {
-                $cond: {
-                  if: {
-                    $eq: ["$isFollow", "$isPrivate"],
-                  },
-                  then: true,
-                  else: { $not: "$isPrivate" },
-                },
-              },
-            },
-          },
         ],
       },
     },
     {
       $unwind: "$user",
-    },
-    {
-      $match: {
-        $expr: {
-          $eq: ["$user.showPost", true],
-        },
-      },
     },
     {
       $lookup: {
@@ -538,13 +452,15 @@ export const getSinglePost = asyncHandler(async (req, res) => {
     },
   ]);
 
-  if (p[0]) {
-    return res.status(200).json({
-      message: "post fetched successfully",
-      post: p[0],
-      isSuccess: true,
-    });
+  if (!p[0]) {
+    throw new ApiError(400, "Post Not found");
   }
+  
+  return res.status(200).json({
+    message: "post fetched successfully",
+    post: p[0],
+    isSuccess: true,
+  });
 });
 
 /// admin controllers

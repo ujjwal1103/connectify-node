@@ -98,7 +98,7 @@ export const getAllNotifications = async (req, res) => {
           pipeline: [
             {
               $project: {
-                imageUrl: 1,
+                images: 1,
               },
             },
           ],

@@ -14,8 +14,8 @@ import {
   deleteByIdAdmin,
 } from "../controller/postController.js";
 
-router.post("/post", verifyToken, upload.single("postImage"), createPost);
-router.get("/posts", verifyToken, fetchAllPosts);
+router.post("/post", verifyToken, upload.array("postImage", 4), createPost);
+router.get("/posts", verifyToken,fetchAllPosts);
 router.get("/post/:postId", verifyToken, getSinglePost);
 router.get("/posts/user", verifyToken, fetchAllPostsByUser);
 router.get("/posts/:userId", verifyToken, fetchAllPostsByUserId);

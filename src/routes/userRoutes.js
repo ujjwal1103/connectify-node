@@ -23,6 +23,7 @@ import {
   getAllUsersIds,
   updateProfilePicture,
   removeProfilePicture,
+  getSendUsers,
 } from "../controller/userController.js";
 import { upload, validateUsername, verifyToken } from "../middleware/index.js";
 const router = express.Router();
@@ -36,6 +37,7 @@ router.put("/user/privateAccount", verifyToken, makeAccountPrivate);
 router.delete("/user", verifyToken, deleteUser);
 router.put("/user/edit", verifyToken, upload.single("avatar"), editUser);
 router.get("/users/search", verifyToken, searchUsers);
+router.get("/users/send", verifyToken, getSendUsers);
 router.get("/oauth/google", googleAuthentication);
 router.get("/authenticate", googleAuthenticate);
 router.get("/createUsers", createUsers);
