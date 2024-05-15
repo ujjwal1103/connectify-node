@@ -1,14 +1,7 @@
 import mongoose from "mongoose";
 import Comment from "../models/comment.modal.js";
-let commentCommonAggregate = (post, parrentCommentId, userId)=> [
-  {
-    $match: {
-      post: new mongoose.Types.ObjectId(post),
-      parrentComment: parrentCommentId
-        ? new mongoose.Types.ObjectId(parrentCommentId)
-        : null,
-    },
-  },
+
+let commentCommonAggregate = (userId) => [
   {
     $lookup: {
       from: "users",
@@ -32,7 +25,6 @@ let commentCommonAggregate = (post, parrentCommentId, userId)=> [
       localField: "_id",
       foreignField: "parrentComment",
       as: "childComments",
-  
     },
   },
   {
@@ -77,14 +69,25 @@ let commentCommonAggregate = (post, parrentCommentId, userId)=> [
       post: { $first: "$post" },
     },
   },
-]
+];
 
 export const getComments = async (req, res) => {
   const { post } = req.params;
-  const {parrentCommentId = null} = req.query;
+  const { parrentCommentId = null } = req.query;
   const { userId } = req.user;
   try {
-    const comments = await Comment.aggregate(commentCommonAggregate(post, parrentCommentId, userId));
+    const comments = await Comment.aggregate([
+      {
+        $match: {
+          post: new mongoose.Types.ObjectId(post),
+          parrentComment: parrentCommentId
+            ? new mongoose.Types.ObjectId(parrentCommentId)
+            : null,
+        },
+      },
+
+      ...commentCommonAggregate(userId),
+    ]);
     return res.status(200).json({
       comments,
       isSuccess: true,
@@ -112,8 +115,16 @@ export const addComment = async (req, res) => {
     });
     const createdComment = await newComment.save();
 
+    console.log(createdComment, "saved comment");
 
-    const comments = await Comment.aggregate(commentCommonAggregate(post, parrentComment, from))
+    const comments = await Comment.aggregate([
+      {
+        $match: {
+          _id: createdComment._id,
+        },
+      },
+      ...commentCommonAggregate(from),
+    ]);
 
     return res.status(201).json({
       comment: comments[0],
