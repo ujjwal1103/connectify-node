@@ -39,7 +39,11 @@ const uploadOnCloudinary = async (localFilePath, folder) => {
     throw new ApiError(400, error.message);
   }
 };
-const uploadVideoCloudinary = async (localFilePath, folder,aspectRatio) => {
+const uploadVideoCloudinary = async (
+  localFilePath,
+  folder,
+  aspectRatio = null
+) => {
   try {
     if (!localFilePath) return null;
     // Validate file type (only allow images)
@@ -59,7 +63,9 @@ const uploadVideoCloudinary = async (localFilePath, folder,aspectRatio) => {
       folder: folder,
       use_filename: true,
       resource_type: "video",
-      transformation: [{ aspect_ratio: aspectRatio, crop: "crop" }],
+      ...(aspectRatio && {
+        transformation: [{ aspect_ratio: aspectRatio, crop: "crop" }],
+      }),
       eager: [{ format: "mp4" }],
     });
     // file has been uploaded successfull
@@ -76,6 +82,31 @@ const uploadMultipleOnCloudinary = async (localFilePaths = [], folder) => {
     const uploadPromises = localFilePaths.map(async (f) => {
       let res;
       if (f.isVideo) {
+        res = await uploadVideoCloudinary(f.path, folder, f?.aspectRatio);
+      } else {
+        console.log(f.path, folder);
+        res = await uploadOnCloudinary(f.path, folder);
+      }
+      console.log(res);
+      return {
+        url: res?.secure_url,
+        publicId: res?.public_id,
+        type: f.isVideo ? "VIDEO" : "IMAGE",
+      };
+    });
+
+    const uploadedUrls = await Promise.all(uploadPromises);
+    return uploadedUrls;
+  } catch (error) {
+    throw new ApiError(400, error.message);
+  }
+};
+
+const uploadMultipleOnCloudinaryBlob = async (blobs, folder) => {
+  try {
+    const uploadPromises = localFilePaths.map(async (f) => {
+      let res;
+      if (f.isVideo) {
         res = await uploadVideoCloudinary(f.path, folder, f.aspectRatio);
       } else {
         res = await uploadOnCloudinary(f.path, folder);
@@ -83,7 +114,7 @@ const uploadMultipleOnCloudinary = async (localFilePaths = [], folder) => {
       return {
         url: res?.secure_url,
         publicId: res?.public_id,
-        type: f.isVideo ? "VIDEO":"IMAGE"
+        type: f.isVideo ? "VIDEO" : "IMAGE",
       };
     });
 

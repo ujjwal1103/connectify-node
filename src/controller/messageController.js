@@ -52,7 +52,6 @@ export const sendMessage = async (req, res) => {
 
     const message = await newMessage.save();
 
-    // add this message as last message in the chat model
     await Chat.findByIdAndUpdate(
       { _id: chat },
       { lastMessage: message._id },
@@ -261,14 +260,21 @@ export const sendAttachments = async (req, res) => {
       throw new ApiError(404, "Files is required");
     }
 
-    const filePaths = req.files.map((f) => f.path);
+    const filePaths = req.files.map((f) => ({
+      path: f.path,
+      isVideo: f.mimetype.includes("video"),
+    }));
 
     const attachmentsUrl = await uploadMultipleOnCloudinary(
       filePaths,
       `${from}/messagesAttachments`
     );
 
-    if (!attachmentsUrl || attachmentsUrl.length === 0) {
+    if (
+      !attachmentsUrl ||
+      !attachmentsUrl[0].url ||
+      attachmentsUrl.length === 0
+    ) {
       throw new ApiError(404, "Files are required");
     }
 
@@ -286,7 +292,7 @@ export const sendAttachments = async (req, res) => {
     existingChat.lastMessage = newMessage;
     await existingChat.save();
 
-    const message = newMessage.save();
+    const message = await newMessage.save();
 
     // add this message as last message in the chat model
     await Chat.findByIdAndUpdate(
@@ -294,6 +300,15 @@ export const sendAttachments = async (req, res) => {
       { lastMessage: message._id },
       { new: true }
     );
+
+    console.log(message);
+    
+    emitEvent(req, NEW_MESSAGE, [from, to], {
+      to,
+      chat,
+      from,
+      message,
+    });
 
     return res.status(200).json({
       isSuccess: true,

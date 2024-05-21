@@ -197,7 +197,7 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
   const posts = Post.aggregate([
     ...postAggregation,
     {
-      $lookup: {
+        $lookup: {
         from: "likes",
         localField: "_id",
         foreignField: "postId",
@@ -237,7 +237,7 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
 export const fetchAllPostsByUser = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 3;
+  const limit = parseInt(req.query.limit) || 9;
 
   const postsAggregate = Post.aggregate([
     {
@@ -299,6 +299,10 @@ export const fetchAllPostsByUser = asyncHandler(async (req, res) => {
 export const fetchAllPostsByUserId = asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { userId: currUserId } = req.user;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 9;
+
+ 
 
   const postsAggregate = Post.aggregate([
     {
