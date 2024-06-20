@@ -11,6 +11,7 @@ import Post from "../models/post.modal.js";
 import { Follow } from "../models/follow.model.js";
 import { getMongoosePaginationOptions, getObjectId } from "../utils/index.js";
 
+
 import {
   deleteFromCloudinary,
   uploadOnCloudinary,
@@ -93,9 +94,10 @@ export const registerUser = asyncHandler(async (req, res) => {
 });
 
 export const loginUser = asyncHandler(async (req, res) => {
+  
   const { username, password } = req.body;
   const user = await User.findOne({ username })
-    .select("username email name password")
+    .select("username email name password avatar")
     .lean();
   if (!user) {
     throw new ApiError(400, `user with ${username} not found`);
@@ -449,11 +451,11 @@ export const updateProfilePicture = asyncHandler(async (req, res) => {
 
   const resp = await uploadOnCloudinary(
     req.file.path,
-    `${user?._id}/profilePictures`
+    `${user?._id}/profilePictures`,
+    { gravity: "face", aspect_ratio: 1, crop: "fill", type: "instagram" }
   );
 
-  const avatar = resp.url;
-  const avatarWithPublicId = {
+  const avatar = {
     url: resp.url,
     publicId: resp.public_id,
   };
@@ -464,16 +466,15 @@ export const updateProfilePicture = asyncHandler(async (req, res) => {
     userId,
     {
       avatar,
-      avatarWithPublicId,
     },
     { new: true }
   );
 
-  if (user?.avatarWithPublicId?.publicId) {
-    await deleteFromCloudinary([user.avatarWithPublicId.publicId]);
+  if (user?.avatar?.publicId) {
+    await deleteFromCloudinary([user.avatar.publicId]);
   }
 
-  return res.status(200).json({ success: true, avatars: { avatar } });
+  return res.status(200).json({ success: true, avatar });
 });
 
 export const removeProfilePicture = asyncHandler(async (req, res) => {
@@ -481,8 +482,8 @@ export const removeProfilePicture = asyncHandler(async (req, res) => {
   const user = await User.findById(userId);
   if (!user) throw new ApiError(400, "User not found");
 
-  if (user?.avatarWithPublicId?.publicId) {
-    await deleteFromCloudinary([user.avatarWithPublicId.publicId]);
+  if (user?.avatar?.publicId) {
+    await deleteFromCloudinary([user.avatar.publicId]);
   }
 
   await User.findByIdAndUpdate(
@@ -500,8 +501,16 @@ export const searchUsers = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const { query } = req.query;
 
-  if (!query && query !== "") {
+  if (query === undefined) {
     throw new ApiError(400, "query param is missing");
+  }
+
+  if (query === "") {
+    return res.status(200).json({
+      users: [],
+      isSuccess: true,
+      notFound: false,
+    });
   }
 
   const users = await User.find({
@@ -510,11 +519,12 @@ export const searchUsers = asyncHandler(async (req, res) => {
       { name: { $regex: query, $options: "i" } },
       { username: { $regex: query, $options: "i" } },
     ],
-  }).select("_id username avatar");
+  }).select("_id username name avatar");
 
   return res.status(200).json({
     users: users,
     isSuccess: true,
+    notFound: users.length === 0,
   });
 });
 

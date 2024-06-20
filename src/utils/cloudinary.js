@@ -10,9 +10,12 @@ cloudinary.config({
 
 // http://res.cloudinary.com/dtzyaxndt/image/upload/v1712471612/65d0b8cbcf65c91cd0e0dc07/postImages/g5mtswr6fyb3ea7qcy5s.jpg
 
-const uploadOnCloudinary = async (localFilePath, folder) => {
+const uploadOnCloudinary = async (localFilePath, folder, options={}) => {
   try {
-    if (!localFilePath) return null;
+    console.log(localFilePath, folder, 'filepath folder')
+    if (!localFilePath) {
+      throw new ApiError(400, 'local file path missing');
+    };
     // Validate file type (only allow images)
     // const allowedExtensions = ["jpg", "jpeg", "png", "gif", "webp"]; // Add more if needed
     // const fileExtension = localFilePath.split(".").pop().toLowerCase();
@@ -26,11 +29,14 @@ const uploadOnCloudinary = async (localFilePath, folder) => {
     //   );
     // }
     //upload the file on cloudinary
+    console.log('starteduploading')
     const response = await cloudinary.uploader.upload(localFilePath, {
       folder: folder,
       use_filename: true,
       resource_type: "auto",
+      transformation: [options],
     });
+    console.log(response)
     // file has been uploaded successfull
     fs.unlinkSync(localFilePath);
     return response;
@@ -39,7 +45,7 @@ const uploadOnCloudinary = async (localFilePath, folder) => {
     throw new ApiError(400, error.message);
   }
 };
-const uploadVideoCloudinary = async (localFilePath, folder,aspectRatio) => {
+const uploadVideoCloudinary = async (localFilePath, folder, aspectRatio) => {
   try {
     if (!localFilePath) return null;
     // Validate file type (only allow images)
@@ -78,12 +84,13 @@ const uploadMultipleOnCloudinary = async (localFilePaths = [], folder) => {
       if (f.isVideo) {
         res = await uploadVideoCloudinary(f.path, folder, f.aspectRatio);
       } else {
+        console.log('upload multiple')
         res = await uploadOnCloudinary(f.path, folder);
       }
       return {
         url: res?.secure_url,
         publicId: res?.public_id,
-        type: f.isVideo ? "VIDEO":"IMAGE"
+        type: f.isVideo ? "VIDEO" : "IMAGE",
       };
     });
 

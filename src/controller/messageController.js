@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import Chat from "../models/chat.modal.js";
 import Message from "../models/message.modal.js";
-import { emitEvent } from "../utils/index.js";
+import { emitEvent, getMongoosePaginationOptions } from "../utils/index.js";
 import { NEW_MESSAGE, SEEN_MESSAGES } from "../utils/constant.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
@@ -261,16 +261,21 @@ export const sendAttachments = async (req, res) => {
       throw new ApiError(404, "Files is required");
     }
 
-    const filePaths = req.files.map((f) => f.path);
+    const files = req.files.map((f) => ({
+      path: f.path,
+      isVideo: f.mimetype.includes("video"),
+    }));
 
     const attachmentsUrl = await uploadMultipleOnCloudinary(
-      filePaths,
+      files,
       `${from}/messagesAttachments`
     );
 
     if (!attachmentsUrl || attachmentsUrl.length === 0) {
       throw new ApiError(404, "Files are required");
     }
+
+    console.log(attachmentsUrl);
 
     // Create a new message
     const newMessage = new Message({
@@ -310,11 +315,9 @@ export const sendAttachments = async (req, res) => {
 
 export const getMessagesInChat = async (req, res) => {
   const { chat } = req.params;
-  const { page = 1, pageSize = 20 } = req.query;
+  const { page = 1, limit = 20 } = req.query;
   const { userId } = req.user;
   try {
-    const skip = (page - 1) * pageSize;
-
     const unreadMessages = await Message.aggregate([
       {
         $match: {
@@ -345,12 +348,7 @@ export const getMessagesInChat = async (req, res) => {
       );
     }
 
-    const totalCount = await Message.countDocuments({ chat });
-    const totalPages = Math.ceil(totalCount / pageSize);
-
-    console.log(idsOnly);
-
-    const mm = await Message.aggregate([
+    const messageAggregate = Message.aggregate([
       {
         $match: {
           chat: new mongoose.Types.ObjectId(chat),
@@ -361,12 +359,12 @@ export const getMessagesInChat = async (req, res) => {
           createdAt: -1,
         },
       },
-      {
-        $skip: skip,
-      },
-      {
-        $limit: parseInt(pageSize),
-      },
+      // {
+      //   $skip: skip,
+      // },
+      // {
+      //   $limit: parseInt(pageSize),
+      // },
       {
         $lookup: {
           from: "posts",
@@ -427,59 +425,37 @@ export const getMessagesInChat = async (req, res) => {
           avatar: "$post.user.avatar",
         },
       },
-      //   {
-      //     $lookup: {
-      //       from: "follows",
-      //       localField: "userId",
-      //       foreignField: "followeeId",
-      //       as: "follow",
-      //       pipeline: [
-      //         {
-      //           $match: {
-      //             followerId: new mongoose.Types.ObjectId(userId),
-      //           },
-      //         },
-      //       ],
-      //     },
-      //   },
-      //   {
-      //     $addFields: {
-      //         isUnavailable: {
-      //             $cond: [
-      //                 {
-      //                     $gt: [
-      //                         {
-      //                             $size: "$follow",
-      //                         },
-      //                         0,
-      //                     ],
-      //                 },
-      //                 true,
-      //                 false,
-      //             ],
-      //         },
-      //     },
-      // },
       {
         $project: {
           post: 0,
-          // follow:0,
         },
       },
     ]);
 
+    const paginatedPosts = await Message.aggregatePaginate(
+      messageAggregate,
+      getMongoosePaginationOptions({
+        limit: limit,
+        page: page,
+        customLabels: { docs: "messages" },
+      })
+    );
+
     if (Number(page) === 1 && idsOnly?.length > 0) {
-      emitEvent(req, SEEN_MESSAGES, [mm[0]?.from, mm[0].to], {
-        chat,
-        idsOnly,
-      });
+      emitEvent(
+        req,
+        SEEN_MESSAGES,
+        [paginatedPosts[0]?.from, paginatedPosts[0].to],
+        {
+          chat,
+          idsOnly,
+        }
+      );
     }
 
     return res.status(200).json({
       isSuccess: true,
-      messages: mm.reverse(),
-      hasMore: mm.length > 0,
-      totalPages,
+      ...paginatedPosts,
     });
   } catch (error) {
     return res.status(500).json({

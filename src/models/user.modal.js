@@ -5,13 +5,13 @@ import jwt from "jsonwebtoken";
 
 const imageSchema = new mongoose.Schema({
   url: {
-      type: String,
-      required: true
+    type: String,
+    required: true,
   },
   publicId: {
-      type: String,
-      required: true
-  }
+    type: String,
+    required: true,
+  },
 });
 
 const userSchema = new mongoose.Schema(
@@ -54,13 +54,10 @@ const userSchema = new mongoose.Schema(
       enum: ["male", "female"],
     },
     avatar: {
-      type: String,
-    },
-    avatarWithPublicId: {
       type: imageSchema,
     },
     coverImage: {
-      type: String,
+      type: imageSchema,
     },
     bio: {
       type: String,
@@ -95,7 +92,6 @@ const userSchema = new mongoose.Schema(
 userSchema.plugin(mongooseAggregatePaginate);
 
 userSchema.methods.generateAccessToken = function () {
-
   return jwt.sign(
     {
       userId: this._id,
@@ -108,7 +104,6 @@ userSchema.methods.generateAccessToken = function () {
 };
 
 userSchema.methods.generateRefreshToken = function () {
-
   return jwt.sign(
     {
       userId: this._id,

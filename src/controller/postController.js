@@ -299,6 +299,8 @@ export const fetchAllPostsByUser = asyncHandler(async (req, res) => {
 export const fetchAllPostsByUserId = asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { userId: currUserId } = req.user;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 3;
 
   const postsAggregate = Post.aggregate([
     {
@@ -374,7 +376,7 @@ export const deletePost = asyncHandler(async (req, res) => {
 
 export const getSinglePost = asyncHandler(async (req, res) => {
   const { postId } = req.params;
-  const { userId } = req.user;;
+  const { userId } = req.user;
   const Id = new mongoose.Types.ObjectId(userId);
   const p = await Post.aggregate([
     {
@@ -455,7 +457,7 @@ export const getSinglePost = asyncHandler(async (req, res) => {
   if (!p[0]) {
     throw new ApiError(400, "Post Not found");
   }
-  
+
   return res.status(200).json({
     message: "post fetched successfully",
     post: p[0],
