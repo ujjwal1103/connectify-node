@@ -11,7 +11,6 @@ import Post from "../models/post.modal.js";
 import { Follow } from "../models/follow.model.js";
 import { getMongoosePaginationOptions, getObjectId } from "../utils/index.js";
 
-
 import {
   deleteFromCloudinary,
   uploadOnCloudinary,
@@ -94,7 +93,6 @@ export const registerUser = asyncHandler(async (req, res) => {
 });
 
 export const loginUser = asyncHandler(async (req, res) => {
-  
   const { username, password } = req.body;
   const user = await User.findOne({ username })
     .select("username email name password avatar")
@@ -499,7 +497,8 @@ export const removeProfilePicture = asyncHandler(async (req, res) => {
 
 export const searchUsers = asyncHandler(async (req, res) => {
   const { userId } = req.user;
-  const { query } = req.query;
+  let { query, limit } = req.query;
+  limit = parseInt(limit) || 10;
 
   if (query === undefined) {
     throw new ApiError(400, "query param is missing");
@@ -513,13 +512,26 @@ export const searchUsers = asyncHandler(async (req, res) => {
     });
   }
 
-  const users = await User.find({
-    _id: { $ne: userId },
-    $or: [
-      { name: { $regex: query, $options: "i" } },
-      { username: { $regex: query, $options: "i" } },
-    ],
-  }).select("_id username name avatar");
+ const users = await User.aggregate([
+    {
+      $match: {
+        _id: { $ne: userId },
+        $or: [
+          { name: { $regex: query, $options: "i" } },
+          { username: { $regex: query, $options: "i" } },
+        ],
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        username: 1,
+        name: 1,
+        avatar: 1,
+      },
+    },
+    { $limit: limit },
+  ]);
 
   return res.status(200).json({
     users: users,
