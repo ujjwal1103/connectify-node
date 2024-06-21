@@ -42,12 +42,12 @@ router.get("/oauth/google", googleAuthentication);
 router.get("/authenticate", googleAuthenticate);
 router.get("/createUsers", createUsers);
 router.patch(
-  "/profilePicture",
+  "/avatar",
   verifyToken,
   upload.single("avatar"),
   updateProfilePicture
 );
-router.delete("/profilePicture/remove", verifyToken, removeProfilePicture);
+router.delete("/avatar", verifyToken, removeProfilePicture);
 
 // admin routes
 //! get routes
