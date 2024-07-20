@@ -1,14 +1,22 @@
-import logger from '../logger.js';
+
 const asyncHandler = (fn) => async (req, res, next) => {
   try {
     await fn(req, res, next);
   } catch (error) {
-    logger.error(error);
+    console.log(error);
     res.status(error.statusCode || 500).json({
-      error: { error },
+      error: error,
     });
   }
 };
 
-export default asyncHandler;
 
+export const handleSuccessResponse = (res, data, status = "Success") => {
+  return res.status(200).json({
+    ...data,
+    isSuccess: true,
+    status,
+  });
+};
+
+export default asyncHandler;

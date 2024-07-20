@@ -5,7 +5,7 @@ import asyncHandler from "../utils/asyncHandler.js";
 import { createNotification } from "./notificationController.js";
 import User from "../models/user.modal.js";
 import { FollowRequest } from "../models/followRequest.modal.js";
-import { emitEvent } from "../utils/index.js";
+import { emitEvent, getMongoosePaginationOptions } from "../utils/index.js";
 import { NEW_REQUEST } from "../utils/constant.js";
 
 export const followUser = asyncHandler(async (req, res) => {
@@ -24,19 +24,19 @@ export const followUser = asyncHandler(async (req, res) => {
 
   if (followee.isPrivate) {
     const existingFollowRequest = await FollowRequest.findOne({
-      requestedBy:followerId,
-      requestedTo:followeeId,
+      requestedBy: followerId,
+      requestedTo: followeeId,
     });
-  
+
     if (existingFollowRequest) {
-      throw new ApiError(409, "Request Already Sent",{isRequested: true});
+      throw new ApiError(409, "Request Already Sent", { isRequested: true });
     }
-  
+
     const followRequest = await FollowRequest.create({
-      requestedBy:followerId,
-      requestedTo:followeeId,
+      requestedBy: followerId,
+      requestedTo: followeeId,
     });
-  
+
     const resp = await createNotification({
       from: followerId,
       text: "Requested to follow you",
@@ -44,7 +44,7 @@ export const followUser = asyncHandler(async (req, res) => {
       type: "FOLLOW_RESQUEST_SENT",
       requestId: followRequest._id,
     });
-  
+
     emitEvent(req, NEW_REQUEST, [followeeId], resp);
 
     return res.status(200).json({ requested: true, followRequest });
@@ -94,9 +94,7 @@ export const unfollowUser = asyncHandler(async (req, res) => {
 export const getFollowers = asyncHandler(async (req, res) => {
   const { userId } = req.params;
   const { userId: currentUserId } = req.user;
-  const { username, page = 1, pageSize = 10 } = req.query;
-  const skipCount = (page - 1) * pageSize;
-  const sameUser = userId === currentUserId;
+  const { username, page = 1, limit = 20 } = req.query;
 
   const matchStage = {
     $match: {
@@ -116,11 +114,22 @@ export const getFollowers = asyncHandler(async (req, res) => {
                   $and: [
                     { $eq: ["$_id", "$$followerId"] },
                     {
-                      $regexMatch: {
-                        input: "$username",
-                        regex: `^${username}`,
-                        options: "i",
-                      },
+                      $or: [
+                        {
+                          $regexMatch: {
+                            input: "$username",
+                            regex: `.*${username}.*`,
+                            options: "i",
+                          },
+                        },
+                        {
+                          $regexMatch: {
+                            input: "$name",
+                            regex: `.*${username}.*`,
+                            options: "i",
+                          },
+                        },
+                      ],
                     },
                   ],
                 },
@@ -185,7 +194,7 @@ export const getFollowers = asyncHandler(async (req, res) => {
         },
       };
 
-  const followers = await Follow.aggregate([
+  const followers = Follow.aggregate([
     matchStage,
     usernameMatchStage,
     {
@@ -214,23 +223,27 @@ export const getFollowers = asyncHandler(async (req, res) => {
         isFollow: -1,
       },
     },
-    {
-      $skip: skipCount,
-    },
-    {
-      $limit: pageSize,
-    },
   ]);
 
-  return res.status(200).json({ isSuccess: true, followers: [...followers],hasMore: followers.length > 0  });
+  const paginatedFollowers = await Follow.aggregatePaginate(
+    followers,
+    getMongoosePaginationOptions({
+      limit,
+      page,
+      customLabels: { docs: "followers" },
+    })
+  );
+
+  return res.status(200).json({
+    isSuccess: true,
+    ...paginatedFollowers,
+  });
 });
 
 export const getFollowing = asyncHandler(async (req, res) => {
   const { userId: currentUserId } = req.user;
   const { userId } = req.params; // Include username in the request params
-  const { username, page = 1, pageSize = 10 } = req.query;
-
-  const skipCount = (page - 1) * pageSize;
+  const { username, page = 1, limit = 20 } = req.query;
 
   const matchStage = {
     $match: {
@@ -296,7 +309,7 @@ export const getFollowing = asyncHandler(async (req, res) => {
                   {
                     $match: {
                       requestedBy: new mongoose.Types.ObjectId(currentUserId),
-                      requestStatus: "PENDING"
+                      requestStatus: "PENDING",
                     },
                   },
                 ],
@@ -342,15 +355,15 @@ export const getFollowing = asyncHandler(async (req, res) => {
                 name: 1,
                 isFollow: 1,
                 follow: 1,
-                isPrivate:1,
-                isRequested:1
+                isPrivate: 1,
+                isRequested: 1,
               },
             },
           ],
         },
       };
 
-  const followings = await Follow.aggregate([
+  const followings = Follow.aggregate([
     matchStage,
     usernameMatchStage,
     {
@@ -363,8 +376,8 @@ export const getFollowing = asyncHandler(async (req, res) => {
         name: "$following.name",
         isFollow: "$following.isFollow",
         follow: "$following.follow",
-        isPrivate: '$following.isPrivate',
-        isRequested: '$following.isRequested'
+        isPrivate: "$following.isPrivate",
+        isRequested: "$following.isRequested",
       },
     },
     {
@@ -380,23 +393,21 @@ export const getFollowing = asyncHandler(async (req, res) => {
         isFollow: -1,
       },
     },
-    {
-      $skip: skipCount,
-    },
-    {
-      $limit: pageSize,
-    },
   ]);
 
-  return res
-    .status(200)
-    .json({ isSuccess: true, followings, hasMore: followings.length > 0 });
+  const paginatedFollowings = await Follow.aggregatePaginate(
+    followings,
+    getMongoosePaginationOptions({
+      limit,
+      page,
+      customLabels: { docs: "following" },
+    })
+  );
+  return res.status(200).json({ isSuccess: true, ...paginatedFollowings });
 });
-
 
 //admin controller
 export const getAllFollowers = asyncHandler(async (req, res) => {
   const follows = await Follow.find().populate("followerId followeeId");
   return res.status(200).json({ follows });
 });
-

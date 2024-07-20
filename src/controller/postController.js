@@ -8,11 +8,11 @@ import {
   deleteMultipleFromCloudinary,
 } from "../utils/cloudinary.js";
 import { getMongoosePaginationOptions } from "../utils/index.js";
+import Like from "../models/like.model.js";
+import Comment from "../models/comment.modal.js";
+import Bookmark from "../models/bookmark.modal.js";
 
-export const createPost = asyncHandler(async (req, res) => {
-  const { userId } = req.user;
-  let { caption, aspectRatio } = req.body;
-
+const getHashtags = (caption) => {
   let hashtagMatches;
   let hashtags;
 
@@ -22,6 +22,24 @@ export const createPost = asyncHandler(async (req, res) => {
       ? hashtagMatches.map((match) => match.replace("#", ""))
       : [];
   }
+
+  return hashtags;
+};
+
+const likeAggregate = {
+  $lookup: {
+    from: "likes",
+    localField: "_id",
+    foreignField: "postId",
+    as: "like",
+  },
+};
+
+export const createPost = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
+  let { caption, aspectRatio } = req.body;
+
+  const hashtags = getHashtags(caption);
 
   if (!req.files.length) {
     throw new ApiError(404, "Image is required");
@@ -196,18 +214,22 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
 
   const posts = Post.aggregate([
     ...postAggregation,
+    likeAggregate,
     {
-        $lookup: {
-        from: "likes",
+      $lookup: {
+        from: "bookmarks",
         localField: "_id",
         foreignField: "postId",
-        as: "like",
+        as: "bookmark",
       },
     },
     {
       $addFields: {
         isLiked: {
           $in: [Id, "$like.likedBy"],
+        },
+        isBookmarked: {
+          $in: [Id, "$bookmark.bookmarkedBy"],
         },
         like: { $size: "$like" },
       },
@@ -238,7 +260,7 @@ export const fetchAllPostsByUser = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 9;
-
+  const Id = new mongoose.Types.ObjectId(userId);
   const postsAggregate = Post.aggregate([
     {
       $match: {
@@ -265,12 +287,13 @@ export const fetchAllPostsByUser = asyncHandler(async (req, res) => {
         ],
       },
     },
+    likeAggregate,
     {
       $lookup: {
-        from: "likes",
+        from: "bookmarks",
         localField: "_id",
         foreignField: "postId",
-        as: "like",
+        as: "bookmark",
       },
     },
     {
@@ -278,6 +301,9 @@ export const fetchAllPostsByUser = asyncHandler(async (req, res) => {
         user: { $first: "$user" },
         isLiked: {
           $in: [new mongoose.Types.ObjectId(userId), "$like.likedBy"],
+        },
+        isBookmarked: {
+          $in: [Id, "$bookmark.bookmarkedBy"],
         },
         like: { $size: "$like" },
       },
@@ -302,8 +328,6 @@ export const fetchAllPostsByUserId = asyncHandler(async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 9;
 
- 
-
   const postsAggregate = Post.aggregate([
     {
       $match: {
@@ -330,14 +354,7 @@ export const fetchAllPostsByUserId = asyncHandler(async (req, res) => {
         ],
       },
     },
-    {
-      $lookup: {
-        from: "likes",
-        localField: "_id",
-        foreignField: "postId",
-        as: "like",
-      },
-    },
+    likeAggregate,
     {
       $addFields: {
         user: { $first: "$user" },
@@ -370,6 +387,9 @@ export const deletePost = asyncHandler(async (req, res) => {
   const publicIds = post.images.map((i) => i.publicId);
   await deleteMultipleFromCloudinary(publicIds);
   await Post.findByIdAndDelete(postId);
+  await Like.deleteMany({ postId });
+  await Comment.deleteMany({ postId });
+  await Bookmark.deleteMany({ postId });
   return res.status(200).json({
     message: "Post deleted successfully",
     isSuccess: true,
@@ -438,12 +458,21 @@ export const getSinglePost = asyncHandler(async (req, res) => {
     {
       $unwind: "$user",
     },
+    likeAggregate,
     {
       $lookup: {
-        from: "likes",
+        from: "bookmarks",
         localField: "_id",
         foreignField: "postId",
-        as: "like",
+        as: "bookmark",
+        pipeline: [
+          {
+            $match: {
+              postId: new mongoose.Types.ObjectId(postId),
+              bookmarkedBy: Id,
+            },
+          },
+        ],
       },
     },
     {
@@ -451,7 +480,17 @@ export const getSinglePost = asyncHandler(async (req, res) => {
         isLiked: {
           $in: [Id, "$like.likedBy"],
         },
+        isBookmarked: {
+          $in: [Id, "$bookmark.bookmarkedBy"],
+        },
         like: { $size: "$like" },
+      },
+    },
+    {
+      $project: {
+        userId: 0,
+        bookmark: 0,
+        __v: 0,
       },
     },
   ]);
@@ -463,6 +502,46 @@ export const getSinglePost = asyncHandler(async (req, res) => {
   return res.status(200).json({
     message: "post fetched successfully",
     post: p[0],
+    isSuccess: true,
+  });
+});
+
+export const updatePost = asyncHandler(async (req, res) => {
+  const { postId } = req.params;
+  const { userId } = req.user;
+
+  const { caption } = req.body;
+
+  if (!mongoose.Types.ObjectId.isValid(postId)) {
+    throw new ApiError(400, "Invalid postId");
+  }
+
+  let post = await Post.findOne({ _id: postId, userId: userId });
+
+  console.log(JSON.stringify(post, null, "  "));
+
+  if (!post) {
+    throw new ApiError(404, "Post not found");
+  }
+
+  const hashtags = getHashtags(caption);
+
+  post = await Post.findOneAndUpdate(
+    { _id: postId },
+    {
+      $set: {
+        caption: caption,
+        hashtags: hashtags,
+      },
+    },
+    {
+      new: true,
+    }
+  );
+
+  res.status(200).json({
+    post: post,
+    message: "Post updated successfully",
     isSuccess: true,
   });
 });
@@ -582,16 +661,7 @@ export const createPostByAdmin = asyncHandler(async (req, res) => {
   if (!imageUrl) {
     throw new ApiError(400, "Image Url is required");
   }
-
-  let hashtagMatches;
-  let hashtags;
-
-  if (caption) {
-    hashtagMatches = caption?.match(/#(\w+)/g);
-    hashtags = hashtagMatches
-      ? hashtagMatches.map((match) => match.replace("#", ""))
-      : [];
-  }
+  const hashtags = getHashtags(caption);
 
   const newPost = {
     caption,

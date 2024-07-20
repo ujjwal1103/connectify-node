@@ -5,16 +5,21 @@ import { ApiError } from "../utils/ApiError.js";
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
+    console.log(file,cb,'from multer')
     cb(null, "public/images");
   },
   filename: function (req, file, cb) {
+    
     if (file) {
       cb(null, file?.originalname || "");
     }
   },
 });
 
-export const upload = multer({ storage: storage, limits:{fieldSize: 25 * 1024 * 1024} });
+export const upload = multer({
+  storage: storage,
+  limits: { fieldSize: 25 * 1024 * 1024 },
+});
 
 export const verifyToken = asyncHandler((req, res, next) => {
   const token = req.header("Authorization");
@@ -54,8 +59,6 @@ export const validateUsernamePassword = (req, res, next) => {
   next();
 };
 
-//middleware to check the current logged in user is admin or not
-
 export const isAdmin = (req, rea, next) => {
   const token = req.header("Authorization");
 
@@ -65,7 +68,6 @@ export const isAdmin = (req, rea, next) => {
 
   const secretKey = "ujjwal";
 };
-
 
 export const validateUsername = asyncHandler(async (req, res, next) => {
   const usernamePattern = /^(?!^[0-9])(?!.*[^a-z0-9_]).+$/;

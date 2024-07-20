@@ -3,8 +3,8 @@ import dotenv from "dotenv";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 import { createServer } from "http";
-import logger from './logger.js';
-import morgan from 'morgan';
+import logger from "./logger.js";
+import morgan from "morgan";
 import {
   chatRouter,
   commentRouter,
@@ -17,6 +17,7 @@ import {
   likeRouter,
   uploadRouter,
   followRequestRouter,
+  bookmarkRouter,
 } from "./routes/index.js";
 import { ApiError } from "./utils/ApiError.js";
 import asyncHandler from "./utils/asyncHandler.js";
@@ -56,22 +57,23 @@ const limiter = rateLimit({
   },
 });
 
-const morganFormat = ':method :url :status :response-time ms';
+const morganFormat = ":method :url :status :response-time ms";
 
-app.use(morgan(morganFormat, {
-  stream: {
-    write: (message) => {
-      const logObject = {
-        method: message.split(' ')[0],
-        url: message.split(' ')[1],
-        status: message.split(' ')[2],
-        responseTime: message.split(' ')[3],
-
-      };
-      logger.info(JSON.stringify(logObject));
-    }
-  }
-}));
+app.use(
+  morgan(morganFormat, {
+    stream: {
+      write: (message) => {
+        const logObject = {
+          method: message.split(" ")[0],
+          url: message.split(" ")[1],
+          status: message.split(" ")[2],
+          responseTime: message.split(" ")[3],
+        };
+        logger.info(JSON.stringify(logObject));
+      },
+    },
+  })
+);
 
 app.use(limiter);
 
@@ -97,6 +99,7 @@ app.use("/api", chatRouter);
 app.use("/api", messageRouter);
 app.use("/api", followRouter);
 app.use("/api", likeRouter);
+app.use("/api", bookmarkRouter);
 app.use("/api", uploadRouter);
 app.use("/api", followRequestRouter);
 
@@ -120,9 +123,9 @@ app.get(
   "/api/isOnline/:userId",
   asyncHandler((req, res) => {
     const { userId } = req.params;
-    console.log(userSocketIDs)
+    console.log(userSocketIDs);
     const isOnline = !!userSocketIDs.get(userId);
-    console.log(isOnline)
+    console.log(isOnline);
     return res
       .status(200)
       .json({ success: true, isOnline, user: userSocketIDs.get(userId) });

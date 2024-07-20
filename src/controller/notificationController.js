@@ -6,6 +6,7 @@ import asyncHandler from "../utils/asyncHandler.js";
 export const getAllNotifications = async (req, res) => {
   const { userId } = req.user;
   const Id = getObjectId(userId);
+  const limit = 30;
   try {
     const unSeenNotifications = await Notification.aggregate([
       {
@@ -45,6 +46,9 @@ export const getAllNotifications = async (req, res) => {
         $match: {
           to: Id,
         },
+      },
+      {
+        $limit: limit,
       },
       {
         $sort: {
@@ -112,12 +116,40 @@ export const getAllNotifications = async (req, res) => {
           postId: {
             $first: "$postId",
           },
+          date: {
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$createdAt",
+            },
+          },
+        },
+      },
+      {
+        $group: {
+          _id: "$date",
+          notifications: {
+            $push: {
+              _id: "$_id",
+              type: "$type",
+              createdAt: "$createdAt",
+              isRead: "$isRead",
+              user: "$from",
+              postId: "$postId",
+            },
+          },
+        },
+      },
+      {
+        $sort: {
+          _id: -1,
         },
       },
     ]);
 
+    console.log(notifications);
+
     return res.status(200).json({
-      notifications: notifications,
+      data: notifications,
       isSuccess: true,
       idsOnly,
     });
@@ -206,7 +238,7 @@ export const getUnseenNotificationCount = asyncHandler(async (req, res) => {
   ]);
 
   return res.status(200).json({
-    notifications: notificationCount[0]?.notificationCount||0,
+    notifications: notificationCount[0]?.notificationCount || 0,
     isSuccess: true,
   });
 });
@@ -214,3 +246,8 @@ export const getUnseenNotificationCount = asyncHandler(async (req, res) => {
 export const deleteNotification = async (from, to) => {
   const res = await Notification.findOneAndDelete({ from, to });
 };
+
+export const deleteNotificationById = asyncHandler(async (req, res) => {
+  await Notification.findOneAndDelete({ _id: req.params.notificationId });
+  return res.json({ message: "notification deleted Successfully" });
+});

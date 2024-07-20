@@ -12,6 +12,7 @@ import {
   createPostByAdmin,
   updatePostByIdAdmin,
   deleteByIdAdmin,
+  updatePost,
 } from "../controller/postController.js";
 
 router.post("/post", verifyToken, upload.array("postImage", 4), createPost);
@@ -21,6 +22,7 @@ router.get("/post/:postId", verifyToken, getSinglePost);
 router.get("/posts/user", verifyToken, fetchAllPostsByUser);
 router.get("/posts/:userId", verifyToken, fetchAllPostsByUserId);
 router.delete("/post/:postId", verifyToken, deletePost);
+router.patch("/post/:postId", verifyToken, updatePost);
 
 // admin routes
 router.get("/admin/posts", getAllPosts);

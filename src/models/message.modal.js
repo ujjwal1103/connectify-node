@@ -46,6 +46,7 @@ const messageSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    reaction: String
   },
   { timestamps: true }
 );

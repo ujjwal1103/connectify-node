@@ -139,6 +139,40 @@ export const acceptFollowRequest = asyncHandler(async (req, res) => {
   });
 });
 
+export const getSentFollowRequests = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
+
+  const sentRequests = await FollowRequest.aggregate([
+    {
+      $match: {
+        requestedBy: new mongoose.Types.ObjectId(userId),
+      },
+    },
+    {
+      $lookup: {
+        from: "users", // assuming your users collection is named 'users'
+        localField: "requestedTo",
+        foreignField: "_id",
+        as: "requestedToUser",
+      },
+    },
+    {
+      $unwind: "$requestedToUser",
+    },
+    {
+      $project: {
+        _id: 1,
+        requestedTo: "$requestedToUser._id",
+        username: "$requestedToUser.username",
+        name: "$requestedToUser.name",
+      avatar: "$requestedToUser.avatar",
+      },
+    },
+  ]);
+
+  return res.status(200).json({ isSuccess: true, sentRequests });
+});
+
 // export const getFollowers = asyncHandler(async (req, res) => {
 //   const { userId } = req.params;
 //   const { userId: currUserId } = req.user;

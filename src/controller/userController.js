@@ -2,9 +2,10 @@ import axios from "axios";
 import User from "../models/user.modal.js";
 import bcrypt from "bcryptjs";
 import QueryString from "qs";
-import asyncHandler from "./../utils/asyncHandler.js";
+import asyncHandler, {
+  handleSuccessResponse,
+} from "./../utils/asyncHandler.js";
 import { ApiError } from "./../utils/ApiError.js";
-import { deleteImage } from "../utils/uploadImage.js";
 import mongoose from "mongoose";
 import { users } from "../userdata.js";
 import Post from "../models/post.modal.js";
@@ -15,10 +16,174 @@ import {
   deleteFromCloudinary,
   uploadOnCloudinary,
 } from "../utils/cloudinary.js";
+import { USERID_NOT_FOUND } from "../constants/index.js";
 
 const options = {
   httpOnly: true,
   secure: true,
+};
+
+const getUserAggregation = (userId, additionalFields = {}) => {
+  const Id = getObjectId(userId);
+
+  return [
+    {
+      $match: {
+        _id: Id,
+      },
+    },
+    {
+      $project: {
+        username: 1,
+        name: 1,
+        email: 1,
+        isPrivate: 1,
+        avatar: 1,
+        bio: 1,
+        gender: 1,
+        ...additionalFields,
+      },
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: "_id",
+        foreignField: "followeeId",
+        as: "followers",
+      },
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: "_id",
+        foreignField: "followerId",
+        as: "following",
+      },
+    },
+    {
+      $lookup: {
+        from: "posts",
+        localField: "_id",
+        foreignField: "userId",
+        as: "posts",
+      },
+    },
+    {
+      $addFields: {
+        followers: {
+          $size: "$followers",
+        },
+        following: {
+          $size: "$following",
+        },
+        posts: {
+          $size: "$posts",
+        },
+      },
+    },
+  ];
+};
+
+const getUserByUsernameAggregation = (username, userId) => {
+  const Id = getObjectId(userId);
+
+  return [
+    {
+      $match: {
+        username: username,
+      },
+    },
+    {
+      $project: {
+        username: 1,
+        name: 1,
+        isPrivate: 1,
+        avatar: 1,
+        bio: 1,
+      },
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: "_id",
+        foreignField: "followeeId",
+        as: "followers",
+      },
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: "_id",
+        foreignField: "followerId",
+        as: "following",
+      },
+    },
+    {
+      $lookup: {
+        from: "followrequests",
+        localField: "_id",
+        foreignField: "requestedTo",
+        as: "isRequested",
+        pipeline: [
+          {
+            $match: {
+              requestedBy: Id,
+              requestStatus: "PENDING",
+            },
+          },
+        ],
+      },
+    },
+    {
+      $lookup: {
+        from: "followrequests",
+        localField: "_id",
+        foreignField: "requestedBy",
+        as: "isRequesting",
+        pipeline: [
+          {
+            $match: {
+              requestedTo: Id,
+              requestStatus: "PENDING",
+            },
+          },
+        ],
+      },
+    },
+    {
+      $lookup: {
+        from: "posts",
+        localField: "_id",
+        foreignField: "userId",
+        as: "posts",
+      },
+    },
+    {
+      $addFields: {
+        followers: {
+          $size: "$followers",
+        },
+        following: {
+          $size: "$following",
+        },
+        posts: {
+          $size: "$posts",
+        },
+        isFollow: {
+          $in: [Id, "$followers.followerId"],
+        },
+        isIFollow: {
+          $in: [Id, "$following.followeeId"],
+        },
+        isRequested: {
+          $in: [Id, "$isRequested.requestedBy"],
+        },
+        isRequesting: {
+          $first: "$isRequesting",
+        },
+      },
+    },
+  ];
 };
 
 const generateAccessAndRefreshTokens = async (userId) => {
@@ -98,11 +263,11 @@ export const loginUser = asyncHandler(async (req, res) => {
     .select("username email name password avatar")
     .lean();
   if (!user) {
-    throw new ApiError(400, `user with ${username} not found`);
+    throw new ApiError(404, `user with ${username} not found`);
   }
   const matchPassword = await bcrypt.compare(password, user.password);
   if (!matchPassword) {
-    throw new ApiError(400, "Incorrect username and password");
+    throw new ApiError(404, "Incorrect username and password");
   }
 
   const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
@@ -126,170 +291,31 @@ export const loginUser = asyncHandler(async (req, res) => {
 export const getUser = asyncHandler(async (req, res) => {
   const { userId } = req.user;
 
-  const Id = getObjectId(userId);
-
-  const user = await User.aggregate([
-    {
-      $match: {
-        _id: Id,
-      },
-    },
-    {
-      $project: {
-        username: 1,
-        name: 1,
-        email: 1,
-        isPrivate: 1,
-        avatar: 1,
-        bio: 1,
-        gender: 1,
-      },
-    },
-    {
-      $lookup: {
-        from: "follows",
-        localField: "_id",
-        foreignField: "followeeId",
-        as: "followers",
-      },
-    },
-    {
-      $lookup: {
-        from: "follows",
-        localField: "_id",
-        foreignField: "followerId",
-        as: "following",
-      },
-    },
-    {
-      $lookup: {
-        from: "posts",
-        localField: "_id",
-        foreignField: "userId",
-        as: "posts",
-      },
-    },
-    {
-      $addFields: {
-        followers: {
-          $size: "$followers",
-        },
-        following: {
-          $size: "$following",
-        },
-        posts: {
-          $size: "$posts",
-        },
-      },
-    },
-  ]);
+  const user = await User.aggregate(getUserAggregation(userId));
 
   if (!user[0]) {
-    throw new ApiError(400, "UserId not found");
+    throw new ApiError(404, USERID_NOT_FOUND);
   }
-  return res.status(200).json({
-    user: user[0],
-    isSuccess: true,
-  });
+  return handleSuccessResponse(res, { user: user[0] });
 });
 
 export const getUserByUsername = asyncHandler(async (req, res) => {
   const { username } = req.params;
   const { userId } = req.user;
 
-  const Id = getObjectId(userId);
-
-  const user = await User.aggregate([
-    {
-      $match: {
-        username: username,
-      },
-    },
-    {
-      $project: {
-        username: 1,
-        name: 1,
-        isPrivate: 1,
-        avatar: 1,
-        bio: 1,
-      },
-    },
-    {
-      $lookup: {
-        from: "follows",
-        localField: "_id",
-        foreignField: "followeeId",
-        as: "followers",
-      },
-    },
-    {
-      $lookup: {
-        from: "follows",
-        localField: "_id",
-        foreignField: "followerId",
-        as: "following",
-      },
-    },
-    {
-      $lookup: {
-        from: "followrequests",
-        localField: "_id",
-        foreignField: "requestedTo",
-        as: "isRequested",
-        pipeline: [
-          {
-            $match: {
-              requestedBy: Id,
-              requestStatus: "PENDING",
-            },
-          },
-        ],
-      },
-    },
-    {
-      $lookup: {
-        from: "posts",
-        localField: "_id",
-        foreignField: "userId",
-        as: "posts",
-      },
-    },
-    {
-      $addFields: {
-        followers: {
-          $size: "$followers",
-        },
-        following: {
-          $size: "$following",
-        },
-        posts: {
-          $size: "$posts",
-        },
-        isFollow: {
-          $in: [Id, "$followers.followerId"],
-        },
-        isIFollow: {
-          $in: [Id, "$following.followeeId"],
-        },
-        isRequested: {
-          $in: [Id, "$isRequested.requestedBy"],
-        },
-      },
-    },
-  ]);
+  const user = await User.aggregate(
+    getUserByUsernameAggregation(username, userId)
+  );
 
   if (!user[0]) {
-    throw new ApiError(400, "UserId not found");
+    throw new ApiError(404, USERID_NOT_FOUND);
   }
-  return res.status(200).json({
-    user: user[0],
-    isSuccess: true,
-  });
+  return handleSuccessResponse(res, { user: user[0] });
 });
 
 export const getUsers = asyncHandler(async (req, res) => {
   const { userId } = req.user;
-  const page = req.query.page || 1;
+  const page = +req.query.page || 1;
   const limit = +req.query.limit || 10;
 
   const usersAggregate = User.aggregate([
@@ -357,9 +383,121 @@ export const getUsers = asyncHandler(async (req, res) => {
     })
   );
 
+  return handleSuccessResponse(res, { ...usersPagination });
+});
+
+export const searchUsers = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
+  let { query, limit } = req.query;
+  limit = parseInt(limit) || 20;
+
+  if (query === undefined) {
+    throw new ApiError(400, "query param is missing");
+  }
+
+  if (query === "") {
+    return res.status(200).json({
+      users: [],
+      isSuccess: true,
+      notFound: false,
+    });
+  }
+
+  const Id = getObjectId(userId);
+  const users = await User.aggregate([
+    {
+      $match: {
+        _id: { $ne: userId },
+        $or: [
+          { name: { $regex: query, $options: "i" } },
+          { username: { $regex: query, $options: "i" } },
+        ],
+      },
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: "_id",
+        foreignField: "followeeId",
+        as: "followers",
+      },
+    },
+    {
+      $lookup: {
+        from: "follows",
+        localField: "_id",
+        foreignField: "followerId",
+        as: "following",
+      },
+    },
+    {
+      $lookup: {
+        from: "followrequests",
+        localField: "_id",
+        foreignField: "requestedTo",
+        as: "isRequested",
+        pipeline: [
+          {
+            $match: {
+              requestedBy: Id,
+              requestStatus: "PENDING",
+            },
+          },
+        ],
+      },
+    },
+    {
+      $lookup: {
+        from: "followrequests",
+        localField: "_id",
+        foreignField: "requestedBy",
+        as: "isRequesting",
+        pipeline: [
+          {
+            $match: {
+              requestedTo: Id,
+              requestStatus: "PENDING",
+            },
+          },
+        ],
+      },
+    },
+
+    {
+      $addFields: {
+        isFollow: {
+          $in: [Id, "$followers.followerId"],
+        },
+        isIFollow: {
+          $in: [Id, "$following.followeeId"],
+        },
+        isRequested: {
+          $in: [Id, "$isRequested.requestedBy"],
+        },
+        isRequesting: {
+          $first: "$isRequesting",
+        },
+      },
+    },
+    {
+      $project: {
+        _id: 1,
+        username: 1,
+        name: 1,
+        avatar: 1,
+        isRequested: 1,
+        isRequesting: 1,
+        isFollow: 1,
+        isIFollow: 1,
+      },
+    },
+    { $limit: limit },
+  ]);
+
   return res.status(200).json({
-    ...usersPagination,
+    users: users,
     isSuccess: true,
+    notFound: users.length === 0,
   });
 });
 
@@ -493,51 +631,6 @@ export const removeProfilePicture = asyncHandler(async (req, res) => {
   );
 
   return res.status(200).json({ isSuccess: true });
-});
-
-export const searchUsers = asyncHandler(async (req, res) => {
-  const { userId } = req.user;
-  let { query, limit } = req.query;
-  limit = parseInt(limit) || 10;
-
-  if (query === undefined) {
-    throw new ApiError(400, "query param is missing");
-  }
-
-  if (query === "") {
-    return res.status(200).json({
-      users: [],
-      isSuccess: true,
-      notFound: false,
-    });
-  }
-
- const users = await User.aggregate([
-    {
-      $match: {
-        _id: { $ne: userId },
-        $or: [
-          { name: { $regex: query, $options: "i" } },
-          { username: { $regex: query, $options: "i" } },
-        ],
-      },
-    },
-    {
-      $project: {
-        _id: 1,
-        username: 1,
-        name: 1,
-        avatar: 1,
-      },
-    },
-    { $limit: limit },
-  ]);
-
-  return res.status(200).json({
-    users: users,
-    isSuccess: true,
-    notFound: users.length === 0,
-  });
 });
 
 const getGoogleAuthToken = async (code) => {

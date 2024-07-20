@@ -34,14 +34,16 @@ const like = asyncHandler(async (req, res) => {
 
   const liked = await Like.create(newLike);
 
-  const resp = await createNotification({
-    from: userId,
-    text: postId ? "Liked your post" : "Commented on your post",
-    to: postUserId,
-    type: postId ? LIKE_POST : COMMENT_POST,
-    postId: postId,
-    commentId: commentId,
-  });
+  if (postUserId !== userId) {
+    const resp = await createNotification({
+      from: userId,
+      text: postId ? "Liked your post" : "Commented on your post",
+      to: postUserId,
+      type: postId ? LIKE_POST : COMMENT_POST,
+      postId: postId,
+      commentId: commentId,
+    });
+  }
 
   emitEvent(req, postId ? LIKE_POST : COMMENT_POST, [postUserId], liked);
 
