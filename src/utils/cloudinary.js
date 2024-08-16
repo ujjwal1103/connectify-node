@@ -10,12 +10,12 @@ cloudinary.config({
 
 // http://res.cloudinary.com/dtzyaxndt/image/upload/v1712471612/65d0b8cbcf65c91cd0e0dc07/postImages/g5mtswr6fyb3ea7qcy5s.jpg
 
-const uploadOnCloudinary = async (localFilePath, folder, options={}) => {
+const uploadOnCloudinary = async (localFilePath, folder, options = {}) => {
   try {
-    console.log(localFilePath, folder, 'filepath folder')
+    console.log(localFilePath, folder, "filepath folder");
     if (!localFilePath) {
-      throw new ApiError(400, 'local file path missing');
-    };
+      throw new ApiError(400, "local file path missing");
+    }
     // Validate file type (only allow images)
     // const allowedExtensions = ["jpg", "jpeg", "png", "gif", "webp"]; // Add more if needed
     // const fileExtension = localFilePath.split(".").pop().toLowerCase();
@@ -29,14 +29,14 @@ const uploadOnCloudinary = async (localFilePath, folder, options={}) => {
     //   );
     // }
     //upload the file on cloudinary
-    console.log('starteduploading')
+    console.log("starteduploading");
     const response = await cloudinary.uploader.upload(localFilePath, {
       folder: folder,
       use_filename: true,
       resource_type: "auto",
       transformation: [options],
     });
-    console.log(response)
+    console.log(response);
     // file has been uploaded successfull
     fs.unlinkSync(localFilePath);
     return response;
@@ -111,7 +111,7 @@ const uploadMultipleOnCloudinaryBlob = async (blobs, folder) => {
       if (f.isVideo) {
         res = await uploadVideoCloudinary(f.path, folder, f.aspectRatio);
       } else {
-        console.log('upload multiple')
+        console.log("upload multiple");
         res = await uploadOnCloudinary(f.path, folder);
       }
       return {
@@ -154,10 +154,51 @@ const deleteMultipleFromCloudinary = async (publicIds = []) => {
   }
 };
 
+async function listAllAssets() {
+  try {
+    const result = await cloudinary.api.resources();
+    return result.resources;
+  } catch (error) {
+    console.error("Error listing assets:", error);
+  }
+}
+
+async function listRootFolders() {
+  try {
+    const result = await cloudinary.api.root_folders();
+    return result.folders;
+  } catch (error) {
+    console.error("Error listing root folders:", error);
+  }
+}
+async function listAllSubFolders(folder) {
+  try {
+    const result = await cloudinary.api.sub_folders(folder);
+    return result.folders;
+  } catch (error) {
+    console.error("Error listing root folders:", error);
+  }
+}
+
+async function listAssetsByFolder(folderName, nextCursor) {
+  console.log(folderName);
+  const result = await cloudinary.api.resources({
+    type: "upload",
+    prefix: folderName,
+  });
+  console.log(result);
+
+  return result.resources;
+}
+
 export {
   uploadOnCloudinary,
   uploadMultipleOnCloudinary,
   deleteFromCloudinary,
   deleteMultipleFromCloudinary,
   uploadVideoCloudinary,
+  listAllAssets,
+  listRootFolders,
+  listAssetsByFolder,
+  listAllSubFolders,
 };

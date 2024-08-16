@@ -93,9 +93,10 @@ export const followUser = asyncHandler(async (req, res) => {
 export const acceptFollowRequest = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const { requestId } = req.params;
+  const { reject = false } = req.query;
 
   const request = await FollowRequest.findByIdAndUpdate(requestId, {
-    requestStatus: "ACCEPTED",
+    requestStatus: reject ? "REJECTED" : "ACCEPTED",
   });
 
   if (!request) {
@@ -146,11 +147,12 @@ export const getSentFollowRequests = asyncHandler(async (req, res) => {
     {
       $match: {
         requestedBy: new mongoose.Types.ObjectId(userId),
+        requestStatus: "PENDING",
       },
     },
     {
       $lookup: {
-        from: "users", // assuming your users collection is named 'users'
+        from: "users",
         localField: "requestedTo",
         foreignField: "_id",
         as: "requestedToUser",
@@ -165,12 +167,32 @@ export const getSentFollowRequests = asyncHandler(async (req, res) => {
         requestedTo: "$requestedToUser._id",
         username: "$requestedToUser.username",
         name: "$requestedToUser.name",
-      avatar: "$requestedToUser.avatar",
+        avatar: "$requestedToUser.avatar",
       },
     },
   ]);
 
   return res.status(200).json({ isSuccess: true, sentRequests });
+});
+
+export const getRequest = asyncHandler(async (req, res) => {
+  const { requestedBy } = req.params;
+  const { userId: requestedTo } = req.user;
+
+  if (!requestedBy) {
+    throw new ApiError(400, "RequestedBy Is Missing");
+  }
+
+  const request = await FollowRequest.findOne({
+    requestedBy,
+    requestedTo,
+    requestStatus: "PENDING",
+  }).lean();
+
+  return res.json({
+    isSuccess: true,
+    request,
+  });
 });
 
 // export const getFollowers = asyncHandler(async (req, res) => {

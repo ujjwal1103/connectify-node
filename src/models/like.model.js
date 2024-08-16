@@ -1,5 +1,7 @@
 import mongoose from "mongoose";
 
+import mongooseAggregatePaginate from "mongoose-aggregate-paginate-v2";
+
 const likeSchema = new mongoose.Schema(
   {
     likedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // Assuming a User model
@@ -8,6 +10,8 @@ const likeSchema = new mongoose.Schema(
   },
   { timestamps: true }
 );
+
+likeSchema.plugin(mongooseAggregatePaginate);
 
 const Like = mongoose.model("Like", likeSchema);
 

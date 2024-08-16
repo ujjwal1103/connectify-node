@@ -27,6 +27,7 @@ import {
 } from "../controller/userController.js";
 import { upload, validateUsername, verifyToken } from "../middleware/index.js";
 const router = express.Router();
+
 router.post("/register", registerUser);
 router.post("/login", loginUser);
 router.get("/user", verifyToken, getUser);

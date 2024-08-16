@@ -4,6 +4,7 @@ import {
   acceptFollowRequest,
   deleteFollowRequest,
   getFollowRequestForUser,
+  getRequest,
   getSentFollowRequests,
   sendFollowRequest,
 } from "../controller/followRequest.controller.js";
@@ -15,6 +16,7 @@ router.delete("/cancelFollow/:requestedTo", verifyToken, deleteFollowRequest);
 router.get("/followRequests", verifyToken, getFollowRequestForUser);
 router.patch("/accept/:requestId", verifyToken, acceptFollowRequest);
 router.get("/sent-requests", verifyToken, getSentFollowRequests);
+router.get("/request/:requestedBy", verifyToken, getRequest);
 
 // router.get("/admin/follows", getAllFollowers);
 

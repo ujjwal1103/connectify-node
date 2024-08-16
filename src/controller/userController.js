@@ -17,6 +17,15 @@ import {
   uploadOnCloudinary,
 } from "../utils/cloudinary.js";
 import { USERID_NOT_FOUND } from "../constants/index.js";
+import Like from "../models/like.model.js";
+import Comment from "../models/comment.modal.js";
+import { FollowRequest } from "../models/followRequest.modal.js";
+import Message from "../models/message.modal.js";
+import Chat from "../models/chat.modal.js";
+import {
+  generateAccessAndRefreshTokens,
+  getMutualFriends,
+} from "../helpers/user.js";
 
 const options = {
   httpOnly: true,
@@ -186,26 +195,6 @@ const getUserByUsernameAggregation = (username, userId) => {
   ];
 };
 
-const generateAccessAndRefreshTokens = async (userId) => {
-  try {
-    const user = await User.findById(userId);
-
-    const accessToken = user.generateAccessToken();
-    const refreshToken = user.generateRefreshToken();
-
-    // attach refresh token to the user document to avoid refreshing the access token with multiple refresh tokens
-    user.refreshToken = refreshToken;
-
-    await user.save({ validateBeforeSave: false });
-    return { accessToken, refreshToken };
-  } catch (error) {
-    throw new ApiError(
-      500,
-      "Something went wrong while generating the access token"
-    );
-  }
-};
-
 export const registerUser = asyncHandler(async (req, res) => {
   const { username, password, email, name } = req.body;
   if (
@@ -229,14 +218,14 @@ export const registerUser = asyncHandler(async (req, res) => {
   const salt = bcrypt.genSaltSync(10);
   const hash = bcrypt.hashSync(password, salt);
 
-  await User.create({
-    email,
+  await User.create({ 
+    email, 
     password: hash,
     name,
     username: username.toLowerCase(),
   });
 
-  const user = await User.findOne({ username: username?.toLowerCase() })
+  const user = await User.findOne({ username: username?.toLowerCase() }) 
     .select("username email name")
     .lean();
 
@@ -307,10 +296,12 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
     getUserByUsernameAggregation(username, userId)
   );
 
+  const mutualFriends = await getMutualFriends(user[0]._id, userId);
+
   if (!user[0]) {
     throw new ApiError(404, USERID_NOT_FOUND);
   }
-  return handleSuccessResponse(res, { user: user[0] });
+  return handleSuccessResponse(res, { user: user[0], mutualFriends });
 });
 
 export const getUsers = asyncHandler(async (req, res) => {
@@ -836,11 +827,31 @@ export const editNewUser = asyncHandler(async (req, res) => {
 export const dashboardData = asyncHandler(async (req, res) => {
   const totalUsers = await User.countDocuments();
   const totalPosts = await Post.countDocuments();
+  const totalLikes = await Like.countDocuments();
+  const totalComments = await Comment.countDocuments();
+  const totalFollowRequests = await FollowRequest.countDocuments();
+  const totalFollow = await Follow.countDocuments();
+  const totalMessages = await Message.countDocuments();
+  const totalChats = await Chat.countDocuments();
 
-  res.status(200).json({
-    totalUsers,
-    totalPosts,
-  });
+  console.log("dashboard call------------------------");
+
+  const data = [
+    { label: "Accounts", count: totalUsers, route: "user" },
+    { label: "Posts", count: totalPosts, route: "posts" },
+    { label: "Likes", count: totalLikes, route: "likes" },
+    { label: "Comments", count: totalComments, route: "comments" },
+    {
+      label: "Requests",
+      count: totalFollowRequests,
+      route: "followRequests",
+    },
+    { label: "Follow", count: totalFollow, route: "follows" },
+    { label: "Messages", count: totalMessages, route: "messages" },
+    { label: "Chats", count: totalChats, route: "chats" },
+  ];
+
+  res.status(200).json(data);
 });
 
 export const getUserByUsernameA = asyncHandler(async (req, res) => {

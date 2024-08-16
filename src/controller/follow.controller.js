@@ -83,6 +83,10 @@ export const unfollowUser = asyncHandler(async (req, res) => {
   const { followeeId } = req.params;
 
   const result = await Follow.findOneAndDelete({ followerId, followeeId });
+  await FollowRequest.deleteOne({
+    requestedBy: followerId,
+    requestedTo: followeeId,
+  });
 
   if (!result) {
     throw new ApiError(404, "User not found");
@@ -408,6 +412,46 @@ export const getFollowing = asyncHandler(async (req, res) => {
 
 //admin controller
 export const getAllFollowers = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 20 } = req.query;
+  const followAggregation = Follow.aggregate([
+    {
+      $lookup: {
+        from: "users",
+        localField: "followerId",
+        foreignField: "_id",
+        as: "followerId",
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "followeeId",
+        foreignField: "_id",
+        as: "followeeId",
+      },
+    },
+    {
+      $unwind: "$followeeId",
+    },
+    {
+      $unwind: "$followerId",
+    },
+    {
+      $sort: {
+        createdAt: -1,
+      },
+    },
+  ]);
+
+  const paginatedFollowers = await Follow.aggregatePaginate(
+    followAggregation,
+    getMongoosePaginationOptions({
+      limit,
+      page,
+      customLabels: { docs: "follows" },
+    })
+  );
+
   const follows = await Follow.find().populate("followerId followeeId");
-  return res.status(200).json({ follows });
+  return res.status(200).json(paginatedFollowers);
 });

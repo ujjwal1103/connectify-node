@@ -10,6 +10,10 @@ import { storage } from "../firebase.config.js";
 import { ApiError } from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import {
+  listAllAssets,
+  listAllSubFolders,
+  listAssetsByFolder,
+  listRootFolders,
   uploadOnCloudinary,
   uploadVideoCloudinary,
 } from "../utils/cloudinary.js";
@@ -29,49 +33,24 @@ export const deleteImageFromStorage = asyncHandler(async (req, res) => {
 
 export const getAllImagesFromStorage = asyncHandler(async (req, res) => {
   const { foldername } = req.params;
-  const storageRef = ref(storage, foldername);
-  const options = {
-    maxResults: parseInt(3),
-    pageToken: 1,
-  };
-  const items = await list(storageRef, options);
-
-  const allImages = await Promise.all(
-    items.items.map(async (item) => {
-      const imageRef = ref(storage, item.fullPath);
-
-      const imageURL = await getDownloadURL(imageRef);
-
-      return { url: imageURL, filename: getFileNameFromPath(item.fullPath) };
-    })
-  );
-
-  return res.status(200).json({ data: allImages.sort() });
+  const allImages = await listAssetsByFolder(foldername);
+  const result = await listAllSubFolders(folder);
+   
+  
+  return res.status(200).json({ data: allImages });
 });
 
 export const getAllFolderNames = asyncHandler(async (req, res) => {
-  const folderStorageRef = ref(storage);
-  const fitems = await listAll(folderStorageRef);
-
-  const result = fitems.prefixes.map((prefix, i) => {
-    const pathArray = prefix.fullPath.split("/");
-    return pathArray;
-  });
-
-  const foldernames = [].concat(...result);
-
-  return res.status(200).json({ data: foldernames });
+  const result = await listRootFolders();
+  return res.status(200).json({ data: result });
 });
 
-function getFileNameFromPath(filePath) {
-  // Use the split method to separate the path based on "/"
-  const pathArray = filePath.split("/");
+export const getAllSubFolders = asyncHandler(async (req, res) => {
+  const { folder } = req.params;
+ 
+  return res.status(200).json({ data: result });
+});
 
-  // The last element of the array will be the file name
-  const fileName = pathArray[pathArray.length - 1];
-
-  return fileName;
-}
 const fetchUrlAsArrayBuffer = async (url) => {
   try {
     const response = await fetch(url);

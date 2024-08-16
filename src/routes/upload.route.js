@@ -2,6 +2,7 @@ import express from "express";
 import {
   getAllFolderNames,
   getAllImagesFromStorage,
+  getAllSubFolders,
   renameFile,
   uploadImageToFirebase,
 } from "../controller/upload.controller.js";
@@ -21,6 +22,7 @@ router.post(
 );
 router.get("/admin/images/:foldername", getAllImagesFromStorage);
 router.get("/admin/folders", getAllFolderNames);
+router.get("/admin/folders/:folder", getAllSubFolders);
 router.post("/admin/rename", renameFile);
 
 export default router;

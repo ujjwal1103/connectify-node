@@ -371,12 +371,6 @@ export const getMessagesInChat = async (req, res) => {
           createdAt: -1,
         },
       },
-      // {
-      //   $skip: skip,
-      // },
-      // {
-      //   $limit: parseInt(pageSize),
-      // },
       {
         $lookup: {
           from: "posts",
@@ -457,7 +451,7 @@ export const getMessagesInChat = async (req, res) => {
       emitEvent(
         req,
         SEEN_MESSAGES,
-        [paginatedPosts[0]?.from, paginatedPosts[0].to],
+        [paginatedPosts[0]?.from, paginatedPosts[0]?.to],
         {
           chat,
           idsOnly,
@@ -470,6 +464,7 @@ export const getMessagesInChat = async (req, res) => {
       ...paginatedPosts,
     });
   } catch (error) {
+    console.log(error)
     return res.status(500).json({
       error: error.message,
       isSuccess: false,

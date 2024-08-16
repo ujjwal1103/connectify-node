@@ -3,7 +3,7 @@ import Like from "../models/like.model.js";
 import { ApiError } from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { createNotification } from "./notificationController.js";
-import { emitEvent } from "../utils/index.js";
+import { emitEvent, getMongoosePaginationOptions } from "../utils/index.js";
 import { COMMENT_POST, LIKE_POST } from "../utils/constant.js";
 
 const like = asyncHandler(async (req, res) => {
@@ -72,8 +72,8 @@ const unlike = asyncHandler(async (req, res) => {
   if (!postId && commentId) {
     newLike.commentId = commentId;
   }
-
   const deletedLike = await Like.findOneAndDelete(newLike);
+  console.log(deletedLike, postId, commentId, newLike);
 
   res.status(200).json({
     liked: deletedLike,
@@ -175,8 +175,34 @@ const fetchlikes = asyncHandler(async (req, res) => {
 //admine
 
 const fetchAllLikes = asyncHandler(async (req, res) => {
-  const likes = await Like.find().populate("likedBy");
+  const { page = 1, limit = 20 } = req.query;
+  const likesAggregate = Like.aggregate([
+    {
+      $lookup: {
+        from: "users",
+        localField: "likedBy",
+        foreignField: "_id",
+        as: "likedBy",
+      },
+    },
+    {
+      $unwind: "$likedBy",
+    },
+  ]);
+  const paginatedFollowers = await Like.aggregatePaginate(
+    likesAggregate,
+    getMongoosePaginationOptions({
+      limit,
+      page,
+      customLabels: { docs: "likes" },
+    })
+  );
+  return res.status(200).json(paginatedFollowers);
+});
+
+const deleteLikeById = asyncHandler(async (req, res) => {
+  const likes = await Like.findByIdAndDelete(req.params.id);
   return res.status(200).json({ likes });
 });
 
-export { like, unlike, fetchlikes, fetchAllLikes };
+export { like, unlike, fetchlikes, fetchAllLikes, deleteLikeById };

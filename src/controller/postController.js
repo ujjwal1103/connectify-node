@@ -614,9 +614,10 @@ export const getAllPosts = async (req, res) => {
           name: "$user.name",
           avatar: "$user.avatar",
           createdAt: 1,
-          imageUrl: 1,
+          images: 1,
           caption: 1,
           hashtags: 1,
+
         },
       },
 

@@ -29,7 +29,6 @@ export const getAllNotifications = async (req, res) => {
 
     const idsOnly = unSeenNotifications.map((notification) => notification._id);
 
-    // Update seen field of unseen notifications to true
     await Notification.updateMany(
       {
         _id: { $in: idsOnly },
@@ -66,6 +65,7 @@ export const getAllNotifications = async (req, res) => {
               $project: {
                 username: 1,
                 avatar: 1,
+                isPrivate:1
               },
             },
             {
@@ -84,9 +84,29 @@ export const getAllNotifications = async (req, res) => {
               },
             },
             {
+              $lookup: {
+                from: "followrequests",
+                localField: "_id",
+                foreignField: "requestedTo",
+                as: "isRequested",
+                pipeline: [
+                  {
+                    $match: {
+                      requestedBy: Id,
+                      requestStatus: "PENDING",
+                    },
+                  },
+                ],
+              },
+            },
+
+            {
               $addFields: {
                 isFollow: {
                   $in: [Id, "$isFollow.followerId"],
+                },
+                isRequested: {
+                  $in: [Id, "$isRequested.requestedBy"],
                 },
               },
             },
@@ -135,6 +155,8 @@ export const getAllNotifications = async (req, res) => {
               isRead: "$isRead",
               user: "$from",
               postId: "$postId",
+              requestId: "$requestId",
+              text: "$text",
             },
           },
         },
@@ -145,8 +167,6 @@ export const getAllNotifications = async (req, res) => {
         },
       },
     ]);
-
-    console.log(notifications);
 
     return res.status(200).json({
       data: notifications,

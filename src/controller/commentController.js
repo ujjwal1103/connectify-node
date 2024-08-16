@@ -1,5 +1,8 @@
 import mongoose from "mongoose";
 import Comment from "../models/comment.modal.js";
+import asyncHandler from "../utils/asyncHandler.js";
+import { emitEvent, getMongoosePaginationOptions } from "../utils/index.js";
+import { COMMENT_POST, NEW_COMMENT } from "../utils/constant.js";
 
 let commentCommonAggregate = (userId) => [
   {
@@ -115,8 +118,6 @@ export const addComment = async (req, res) => {
     });
     const createdComment = await newComment.save();
 
-    console.log(createdComment, "saved comment");
-
     const comments = await Comment.aggregate([
       {
         $match: {
@@ -125,6 +126,8 @@ export const addComment = async (req, res) => {
       },
       ...commentCommonAggregate(from),
     ]);
+
+    emitEvent(req, NEW_COMMENT, [comments[0]?.post?.userId], comments[0]);
 
     return res.status(201).json({
       comment: comments[0],
@@ -137,3 +140,47 @@ export const addComment = async (req, res) => {
     });
   }
 };
+
+export const getAllComments = asyncHandler(async (req, res) => {
+  const { page = 1, limit = 20 } = req.query;
+
+  const comments = Comment.aggregate([
+    {
+      $sort: {
+        createdAt: -1,
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "from",
+        foreignField: "_id",
+        as: "user",
+        pipeline: [
+          {
+            $project: {
+              _id: 1,
+              username: 1,
+              avatar: 1,
+              name: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $unwind: "$user",
+    },
+  ]);
+
+  const paginatedComments = await Comment.aggregatePaginate(
+    comments,
+    getMongoosePaginationOptions({
+      limit,
+      page,
+      customLabels: { docs: "comments" },
+    })
+  );
+
+  return res.status(200).json(paginatedComments);
+});
