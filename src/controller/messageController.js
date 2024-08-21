@@ -14,7 +14,6 @@ export const sendMessage = async (req, res) => {
   const { chat } = req.params;
   const { text, messageType, to, post = null } = req.body;
 
-  console.log(text, messageType, to);
   if (!text) throw new ApiError(404, "Empty message");
   try {
     const existingChat = await Chat.findById(chat);
@@ -25,7 +24,6 @@ export const sendMessage = async (req, res) => {
         isSuccess: false,
       });
     }
-
     // Check if the user sending the message is a participant in the chat
     if (!existingChat.members.includes(from)) {
       return res.status(403).json({
@@ -33,8 +31,6 @@ export const sendMessage = async (req, res) => {
         isSuccess: false,
       });
     }
-
-    console.log(existingChat);
 
     // Create a new message
     const newMessage = new Message({
@@ -58,7 +54,7 @@ export const sendMessage = async (req, res) => {
       { new: true }
     );
 
-    emitEvent(req, NEW_MESSAGE, [from, to], {
+    emitEvent(req, NEW_MESSAGE, [...existingChat.members], {
       to,
       chat,
       from,
@@ -248,7 +244,6 @@ export const sendAttachments = async (req, res) => {
       });
     }
 
-    // Check if the user sending the message is a participant in the chat
     if (!existingChat.members.includes(from)) {
       return res.status(403).json({
         error: "You are not a participant in this chat",
@@ -278,9 +273,6 @@ export const sendAttachments = async (req, res) => {
       throw new ApiError(404, "Files are required");
     }
 
-    console.log(attachmentsUrl);
-
-    // Create a new message
     const newMessage = new Message({
       from,
       text: "",
@@ -289,23 +281,19 @@ export const sendAttachments = async (req, res) => {
       to,
       chat,
     });
-
-    // Update the "lastMessage" field in the chat
     existingChat.lastMessage = newMessage;
     await existingChat.save();
 
     const message = await newMessage.save();
 
-    // add this message as last message in the chat model
     await Chat.findByIdAndUpdate(
       { _id: chat },
       { lastMessage: message._id },
       { new: true }
     );
 
-    console.log(message);
-    
-    emitEvent(req, NEW_MESSAGE, [from, to], {
+
+    emitEvent(req, NEW_MESSAGE, [...existingChat.members], {
       to,
       chat,
       from,

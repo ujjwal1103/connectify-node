@@ -2,7 +2,8 @@ import mongoose from "mongoose";
 import Comment from "../models/comment.modal.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { emitEvent, getMongoosePaginationOptions } from "../utils/index.js";
-import { COMMENT_POST, NEW_COMMENT } from "../utils/constant.js";
+import { NEW_COMMENT } from "../utils/constant.js";
+import { createNotification } from "./notificationController.js";
 
 let commentCommonAggregate = (userId) => [
   {
@@ -103,7 +104,7 @@ export const getComments = async (req, res) => {
   }
 };
 
-// add new notifications
+
 export const addComment = async (req, res) => {
   const { userId: from } = req.user;
   const { comment, post, mentions, parrentComment } = req.body;
@@ -127,7 +128,18 @@ export const addComment = async (req, res) => {
       ...commentCommonAggregate(from),
     ]);
 
-    emitEvent(req, NEW_COMMENT, [comments[0]?.post?.userId], comments[0]);
+    if (from !== comments[0]?.post?.userId) { 
+      const resp = await createNotification({
+        from: from,
+        text: "Commented on your post",
+        to: comments[0]?.post?.userId,
+        type: NEW_COMMENT,
+        postId: post, 
+        commentId: comments[0]?.post?._id,
+      });
+
+      emitEvent(req, NEW_COMMENT, [comments[0]?.post?.userId], resp);
+    }
 
     return res.status(201).json({
       comment: comments[0],
@@ -136,7 +148,7 @@ export const addComment = async (req, res) => {
   } catch (err) {
     return res.status(500).json({
       error: err.message,
-      isSuccess: false,
+      isSuccess: false, 
     });
   }
 };

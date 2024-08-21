@@ -12,31 +12,15 @@ cloudinary.config({
 
 const uploadOnCloudinary = async (localFilePath, folder, options = {}) => {
   try {
-    console.log(localFilePath, folder, "filepath folder");
     if (!localFilePath) {
       throw new ApiError(400, "local file path missing");
     }
-    // Validate file type (only allow images)
-    // const allowedExtensions = ["jpg", "jpeg", "png", "gif", "webp"]; // Add more if needed
-    // const fileExtension = localFilePath.split(".").pop().toLowerCase();
-    // if (!allowedExtensions.includes(fileExtension)) {
-    //   console.log(
-    //     "Invalid file type. Only images (jpg, jpeg, png, gif, webp) are allowed."
-    //   );
-    //   throw new ApiError(
-    //     404,
-    //     "Invalid file type. Only images (jpg, jpeg, png, gif, webp) are allowed."
-    //   );
-    // }
-    //upload the file on cloudinary
-    console.log("starteduploading");
     const response = await cloudinary.uploader.upload(localFilePath, {
       folder: folder,
       use_filename: true,
       resource_type: "auto",
       transformation: [options],
     });
-    console.log(response);
     // file has been uploaded successfull
     fs.unlinkSync(localFilePath);
     return response;
@@ -48,19 +32,6 @@ const uploadOnCloudinary = async (localFilePath, folder, options = {}) => {
 const uploadVideoCloudinary = async (localFilePath, folder, aspectRatio) => {
   try {
     if (!localFilePath) return null;
-    // Validate file type (only allow images)
-    // const allowedExtensions = ["jpg", "jpeg", "png", "gif", "webp"]; // Add more if needed
-    // const fileExtension = localFilePath.split(".").pop().toLowerCase();
-    // if (!allowedExtensions.includes(fileExtension)) {
-    //   console.log(
-    //     "Invalid file type. Only images (jpg, jpeg, png, gif, webp) are allowed."
-    //   );
-    //   throw new ApiError(
-    //     404,
-    //     "Invalid file type. Only images (jpg, jpeg, png, gif, webp) are allowed."
-    //   );
-    // }
-    //upload the file on cloudinary
     const response = await cloudinary.uploader.upload(localFilePath, {
       folder: folder,
       use_filename: true,
@@ -86,12 +57,10 @@ const uploadMultipleOnCloudinary = async (localFilePaths = [], folder) => {
       if (f.isVideo) {
         res = await uploadVideoCloudinary(f.path, folder, f?.aspectRatio);
       } else {
-        console.log(f.path, folder);
         res = await uploadOnCloudinary(f.path, folder);
       }
-      console.log(res);
       return {
-        url: res?.secure_url,
+        url: res?.secure_url + `?height=${res.height}&width=${res.width}`,
         publicId: res?.public_id,
         type: f.isVideo ? "VIDEO" : "IMAGE",
       };

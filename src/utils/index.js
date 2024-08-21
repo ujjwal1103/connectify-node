@@ -32,6 +32,7 @@ export function formatDateDifference(date) {
 export const getObjectId = (id) => {
   return new mongoose.Types.ObjectId(id);
 };
+
 export const getSockets = (users = []) => {
   const sockets = users.map((user) => userSocketIDs.get(user?.toString()));
   return sockets;

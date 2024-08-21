@@ -17,6 +17,7 @@ const messageSchema = new mongoose.Schema(
         "VIDEO",
         "VOICE_MESSAGE",
         "POST_MESSAGE",
+        "GROUP_CREATED"
       ],
     },
     attachments: {

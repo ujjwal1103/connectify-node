@@ -7,6 +7,7 @@ export const COMMENT_POST = "COMMENT_POST";
 export const NEW_COMMENT = "NEW_COMMENT";
 export const SEEN_MESSAGES = "SEEN_MESSAGES";
 export const REFECTCH_CHATS = "REFECTCH_CHATS";
+export const LIKE_COMMENT = 'LIKE_COMMENT';
 
 // regex
 export const USERNAME_REGEX = /^(?=[a-z_])[a-z0-9_]{5,20}$/;

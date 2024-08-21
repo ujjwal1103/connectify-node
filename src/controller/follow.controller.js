@@ -361,6 +361,7 @@ export const getFollowing = asyncHandler(async (req, res) => {
                 follow: 1,
                 isPrivate: 1,
                 isRequested: 1,
+                avatar:1,
               },
             },
           ],
@@ -379,9 +380,9 @@ export const getFollowing = asyncHandler(async (req, res) => {
         username: "$following.username",
         name: "$following.name",
         isFollow: "$following.isFollow",
-        follow: "$following.follow",
         isPrivate: "$following.isPrivate",
         isRequested: "$following.isRequested",
+        avatar: '$following.avatar'
       },
     },
     {

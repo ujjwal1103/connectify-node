@@ -4,7 +4,7 @@ import { ApiError } from "../utils/ApiError.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { createNotification } from "./notificationController.js";
 import { emitEvent, getMongoosePaginationOptions } from "../utils/index.js";
-import { COMMENT_POST, LIKE_POST } from "../utils/constant.js";
+import { COMMENT_POST, LIKE_COMMENT, LIKE_POST } from "../utils/constant.js";
 
 const like = asyncHandler(async (req, res) => {
   const { postId, commentId, postUserId } = req.body;
@@ -14,7 +14,7 @@ const like = asyncHandler(async (req, res) => {
     likedBy: userId,
   };
 
-  if (!postId && !commentId) {
+  if (!postId && !commentId && !postUserId) {
     throw new ApiError(400, "Reference Id is missing");
   }
 
@@ -39,7 +39,7 @@ const like = asyncHandler(async (req, res) => {
       from: userId,
       text: postId ? "Liked your post" : "Commented on your post",
       to: postUserId,
-      type: postId ? LIKE_POST : COMMENT_POST,
+      type: postId ? LIKE_POST : LIKE_COMMENT,
       postId: postId,
       commentId: commentId,
     });

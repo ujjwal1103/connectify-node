@@ -29,7 +29,8 @@ export const createChat = asyncHandler(async (req, res) => {
 
   const existingChat = await Chat.findOne({
     members: {
-      $all: members,
+      $all: members,  // Ensure all specified users are present
+      $size: 2,  // Ensure the array length matches exactly
     },
   })
     .populate({
@@ -79,6 +80,7 @@ export const createChat = asyncHandler(async (req, res) => {
     chat: { ...chat, friend: friend },
   });
 });
+
 export const createGroup = asyncHandler(async (req, res) => {
   const {
     user: { userId },
@@ -86,11 +88,6 @@ export const createGroup = asyncHandler(async (req, res) => {
   } = req;
   const allUsers = JSON.parse(users);
   const members = [userId, ...allUsers];
-  console.log(allUsers);
-  // const toUser = await User.findById(to);
-  // if (!toUser) {
-  //   throw new ApiError(400, `The ${to} user does not exist`);
-  // }
 
   if (allUsers?.some((user) => user === userId)) {
     throw new ApiError(
@@ -101,7 +98,8 @@ export const createGroup = asyncHandler(async (req, res) => {
 
   const existingChat = await Chat.findOne({
     members: {
-      $all: members,
+      $all: members,  // Ensure all specified users are present
+      $size: members.length,  // Ensure the array length matches exactly
     },
   })
     .populate({
@@ -113,6 +111,7 @@ export const createGroup = asyncHandler(async (req, res) => {
   if (existingChat) {
     return res.status(201).json({
       isSuccess: true,
+      isExisting: true,
       chat: { ...existingChat },
     });
   }
