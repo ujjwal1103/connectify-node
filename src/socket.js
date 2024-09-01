@@ -1,4 +1,5 @@
 import { io } from "./app.js";
+import Message from "./models/message.modal.js";
 import { SEEN_MESSAGES } from "./utils/constant.js";
 import { getSockets } from "./utils/index.js";
 
@@ -9,9 +10,11 @@ export const runSocket = () => {
   try {
     io.on("connection", (socket) => {
       const user = socket.user;
+      if (userSocketIDs.has(user?._id?.toString())) {
+        console.log('already connected')
+      }
       userSocketIDs.set(user?._id?.toString(), socket.id);
-      console.log("user connected", user?.username, socket.id);
-      console.log(userSocketIDs);
+      console.log(userSocketIDs, user.username, 'connected')
       socket.on("Notification", (notify) => {
         if (notify) {
           const user = findUser(notify.to);
@@ -21,15 +24,15 @@ export const runSocket = () => {
 
       socket.on(SEEN_MESSAGES, (data) => {
         if (data) {
+          console.log('data seen')
           const sockets = getSockets([data.to]);
           io.to(sockets).emit(SEEN_MESSAGES, data);
+          Message.findByIdAndUpdate(data.message, { seen: true })
         }
       });
 
       socket.on("disconnect", (t) => {
-        console.log("socket disconnected", t, socket.id);
         userSocketIDs.delete(socket.id)
-
       });
     });
   } catch (error) {

@@ -121,6 +121,21 @@ const fetchlikes = asyncHandler(async (req, res) => {
             },
           },
           {
+            $lookup: {
+              from: "followrequests",
+              localField: "_id",
+              foreignField: "requestedTo",
+              as: "request",
+              pipeline: [
+                {
+                  $match: {
+                    requestedTo: new mongoose.Types.ObjectId(userId),
+                  },
+                },
+              ],
+            },
+          },
+          {
             $addFields: {
               isFollow: {
                 $cond: {
@@ -147,6 +162,7 @@ const fetchlikes = asyncHandler(async (req, res) => {
               likeId: 1,
               isFollow: 1,
               isCurrentUser: 1,
+              request: 1
             },
           },
         ],

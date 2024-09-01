@@ -125,7 +125,6 @@ app.get(
     const { userId } = req.params;
     console.log(userSocketIDs);
     const isOnline = !!userSocketIDs.get(userId);
-    console.log(isOnline);
     return res
       .status(200)
       .json({ success: true, isOnline, user: userSocketIDs.get(userId) });

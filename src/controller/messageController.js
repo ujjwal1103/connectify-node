@@ -9,6 +9,96 @@ import { uploadMultipleOnCloudinary } from "../utils/cloudinary.js";
 import User from "../models/user.modal.js";
 import { Follow } from "../models/follow.model.js";
 
+
+const getMessageAggregate = (chat) => {
+  return [
+    {
+      $match: {
+        chat: new mongoose.Types.ObjectId(chat),
+      },
+    },
+    {
+      $sort: {
+        createdAt: -1,
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "from",
+        foreignField: "_id",
+        as: "sender",
+        pipeline: [
+          {
+            $project: {
+              _id: 1,
+              username: 1,
+              avatar: 1,
+            },
+          },
+        ],
+
+      }
+    }
+    ,
+    {
+      $lookup: {
+        from: "posts",
+        localField: "post",
+        foreignField: "_id",
+        as: "post",
+        pipeline: [
+          {
+            $project: {
+              _id: 1,
+              userId: 1,
+              images: 1,
+              caption: 1,
+            },
+          },
+          {
+            $lookup: {
+              from: "users",
+              localField: "userId",
+              foreignField: "_id",
+              as: "user",
+              pipeline: [
+                {
+                  $limit: 1
+                },
+                {
+                  $project: {
+                    _id: 1,
+                    username: 1,
+                    avatar: 1,
+                  },
+                },
+              ],
+            },
+          },
+          {
+            $addFields: {
+              user: {
+                $first: "$user",
+              },
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        post: {
+          $first: "$post",
+        },
+        sender: {
+          $first: "$sender",
+        },
+      },
+    },
+  ]
+}
+
 export const sendMessage = async (req, res) => {
   const { userId: from } = req.user;
   const { chat } = req.params;
@@ -46,7 +136,11 @@ export const sendMessage = async (req, res) => {
     existingChat.lastMessage = newMessage;
     await existingChat.save();
 
-    const message = await newMessage.save();
+    await newMessage.save();
+
+    const messageAggregate = await Message.aggregate(getMessageAggregate(chat));
+
+    const message = messageAggregate[0]
 
     await Chat.findByIdAndUpdate(
       { _id: chat },
@@ -54,17 +148,20 @@ export const sendMessage = async (req, res) => {
       { new: true }
     );
 
-    emitEvent(req, NEW_MESSAGE, [...existingChat.members], {
+
+
+    emitEvent(req, NEW_MESSAGE, [...existingChat.members.filter(mem => mem.toString() !== from)], {
       to,
       chat,
       from,
       message,
     });
 
+
     return res.status(200).json({
       isSuccess: true,
-      chat: chat,
-      message: message,
+      chat,
+      message
     });
   } catch (error) {
     return res.status(500).json({
@@ -77,6 +174,7 @@ export const sendMessageToUsers = asyncHandler(async (req, res) => {
   const { userId: from } = req.user;
 
   const { post, userId, messageType } = req.body;
+
   let chat = null;
   chat = await Chat.findOne({
     members: { $all: [userId, from] },
@@ -93,7 +191,7 @@ export const sendMessageToUsers = asyncHandler(async (req, res) => {
     if (from === userId) {
       throw new ApiError(
         400,
-        "The 'to' array cannot contain the same user as the 'from' user."
+        "Invalid Action "
       );
     }
 
@@ -284,7 +382,10 @@ export const sendAttachments = async (req, res) => {
     existingChat.lastMessage = newMessage;
     await existingChat.save();
 
-    const message = await newMessage.save();
+    await newMessage.save();
+
+    const messageAggregate = await Message.aggregate(getMessageAggregate(chat));
+    const message = messageAggregate[0]
 
     await Chat.findByIdAndUpdate(
       { _id: chat },
@@ -293,7 +394,7 @@ export const sendAttachments = async (req, res) => {
     );
 
 
-    emitEvent(req, NEW_MESSAGE, [...existingChat.members], {
+    emitEvent(req, NEW_MESSAGE, [...existingChat.members.filter(mem => mem.toString() !== from)], {
       to,
       chat,
       from,
@@ -303,7 +404,7 @@ export const sendAttachments = async (req, res) => {
     return res.status(200).json({
       isSuccess: true,
       chatId: chat,
-      message: newMessage,
+      message: message,
     });
   } catch (error) {
     return res.status(500).json({
@@ -361,6 +462,25 @@ export const getMessagesInChat = async (req, res) => {
       },
       {
         $lookup: {
+          from: "users",
+          localField: "from",
+          foreignField: "_id",
+          as: "sender",
+          pipeline: [
+            {
+              $project: {
+                _id: 1,
+                username: 1,
+                avatar: 1,
+              },
+            },
+          ],
+
+        }
+      }
+      ,
+      {
+        $lookup: {
           from: "posts",
           localField: "post",
           foreignField: "_id",
@@ -370,7 +490,7 @@ export const getMessagesInChat = async (req, res) => {
               $project: {
                 _id: 1,
                 userId: 1,
-                imageUrl: 1,
+                images: 1,
                 caption: 1,
               },
             },
@@ -381,6 +501,9 @@ export const getMessagesInChat = async (req, res) => {
                 foreignField: "_id",
                 as: "user",
                 pipeline: [
+                  {
+                    $limit: 1
+                  },
                   {
                     $project: {
                       _id: 1,
@@ -406,22 +529,9 @@ export const getMessagesInChat = async (req, res) => {
           post: {
             $first: "$post",
           },
-        },
-      },
-      {
-        $addFields: {
-          username: "$post.user.username",
-          name: "$post.user.name",
-          userId: "$post.user._id", // post owner
-          postImages: "$post.imageUrl",
-          caption: "$post.caption",
-          postId: "$post._id",
-          avatar: "$post.user.avatar",
-        },
-      },
-      {
-        $project: {
-          post: 0,
+          sender: {
+            $first: "$sender",
+          },
         },
       },
     ]);
@@ -464,14 +574,15 @@ export const deleteMessage = async (req, res) => {
   const { messageId } = req.params;
   try {
     const message = await Message.findById(messageId);
+
     if (!message) {
       return res.status(404).json({
         error: "Message not found",
         isSuccess: false,
       });
     }
-    // Check authorization here to ensure the user can delete the message
-    await message.remove();
+
+    // await message.remove();
     return res.status(200).json({
       isSuccess: true,
       message: "Message deleted successfully",
@@ -533,3 +644,17 @@ export const markMessageAsSeen = asyncHandler(async (req, res) => {
     message,
   });
 });
+
+
+export const reactMessage = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
+  const { messageId } = req.params;
+  const { react } = req.query;
+
+  const message = await Message.findByIdAndUpdate(messageId, { reaction: react }, { new: true })
+
+  return res.status(200).json({
+    isSuccess: true,
+    message
+  });
+})

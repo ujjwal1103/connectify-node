@@ -1,16 +1,25 @@
-import { ref } from "firebase/storage";
 import mongoose from "mongoose";
+import { imageSchema } from "./chat.modal.js";
 
 // Define the Story schema
 const storySchema = new mongoose.Schema(
   {
     content: {
-      type: String,
+      type: imageSchema,
       required: true,
     },
     viewedBy: {
       type: [mongoose.Schema.Types.ObjectId],
       ref: "User",
+    },
+    storyOwner: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+    },
+    expireDate: {
+      type: Date,
+      default: () => Date.now() + 24 * 60 * 60 * 1000, // 24 hours from creation
+      index: { expires: '1s' }, // Expire after 1 second once the expireDate is reached
     },
   },
   { timestamps: true }
@@ -31,7 +40,7 @@ const userStoriesSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: "Story",
     },
-  ],
+  ],  
 });
 
 export const UserStories = mongoose.model("UserStrories", userStoriesSchema);

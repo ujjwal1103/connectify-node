@@ -1,19 +1,33 @@
 import Story, { UserStories } from "../models/story.modal.js";
 import asyncHandler from "./../utils/asyncHandler.js";
 import { ApiError } from "./../utils/ApiError.js";
+import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
 export const createStory = asyncHandler(async (req, res) => {
   const { userId } = req.user;
 
+  if (!req.file) {
+    throw new ApiError(404, "Image is required");
+  }
+
+  const resp = await uploadOnCloudinary(
+    req.file.path,
+    `${userId}/stories`,
+  );
+
   const story = await Story.create({
-    content: process.env.IMAGE_PATH + req.file.originalname,
+    content: {
+      url: resp.secure_url,
+      publicId: resp.public_id,
+    },
+    storyOwner: userId
   });
 
   if (!story) {
     throw new ApiError(400, `story creation failed`);
   }
   const userStories = await UserStories.findOne({ user: userId }).lean();
-  
+
   if (userStories) {
     const updatedUserStories = await UserStories.findOneAndUpdate(
       { user: userId },
@@ -51,7 +65,7 @@ export const getstories = asyncHandler(async (req, res) => {
     .populate("stories")
     .lean();
   res.status(200).json({
-    stories: stories,
+    stories: stories.filter(story=>story.stories.length),
     message: "Story fetch successfully",
     isSuccess: true,
   });

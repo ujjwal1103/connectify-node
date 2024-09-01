@@ -6,6 +6,7 @@ import {
   getMessagesInChat,
   markAllMessagesAsSeen,
   markMessageAsSeen,
+  reactMessage,
   sendAttachments,
   sendMessage,
   sendMessageToUsers,
@@ -15,10 +16,11 @@ const router = express.Router();
 router.get("/messages/:chat", verifyToken, getMessagesInChat);
 router.post("/message/:chat", verifyToken, sendMessage);
 router.post("/message/u/send", verifyToken, sendMessageToUsers);
-router.post("/message/attachments/:chat", verifyToken, upload.array("messageAttachement", 4),sendAttachments);
+router.post("/message/attachments/:chat", verifyToken, upload.array("messageAttachement", 4), sendAttachments);
 router.put("/seen-message/:chatId", verifyToken, markAllMessagesAsSeen);
 router.put("/message/seen/:messageId", verifyToken, markMessageAsSeen);
 router.delete("/message/:messageId", verifyToken, deleteMessage);
 router.delete("/messages", verifyToken, deleteMultipleMessage);
+router.put("/message/react/:messageId", verifyToken, reactMessage);
 
 export default router;

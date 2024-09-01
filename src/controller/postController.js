@@ -111,7 +111,7 @@ export const createPost = asyncHandler(async (req, res) => {
 export const fetchAllPosts = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const page = parseInt(req.query.page) || 1;
-  const perPage = 6; // Number of posts per page
+  const perPage = parseInt(req.query.limit) || 10;
   const Id = new mongoose.Types.ObjectId(userId);
 
   const postAggregation = [
@@ -148,21 +148,21 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
               ],
             },
           },
-          {
-            $lookup: {
-              from: "followrequests",
-              localField: "_id",
-              foreignField: "requestedTo",
-              as: "isFollow",
-              pipeline: [
-                {
-                  $match: {
-                    requestedBy: Id,
-                  },
-                },
-              ],
-            },
-          },
+          // {
+          //   $lookup: {
+          //     from: "followrequests",
+          //     localField: "_id",
+          //     foreignField: "requestedTo",
+          //     as: "isFollow",
+          //     pipeline: [
+          //       {
+          //         $match: {
+          //           requestedBy: Id,
+          //         },
+          //       },
+          //     ],
+          //   },
+          // },
           {
             $addFields: {
               isFollow: {
@@ -179,6 +179,20 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
                   else: false,
                 },
               },
+              // isRequested: {
+              //   $cond: {
+              //     if: {
+              //       $gte: [
+              //         {
+              //           $size: "$isRequested",
+              //         },
+              //         1,
+              //       ],
+              //     },
+              //     then: true,
+              //     else: false,
+              //   },
+              // },
             },
           },
           {
@@ -200,6 +214,7 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
         ],
       },
     },
+
     {
       $unwind: "$user",
     },

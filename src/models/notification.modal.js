@@ -29,7 +29,7 @@ const notificationSchema = new mongoose.Schema(
         "FOLLOWING",
         "LIKE_COMMENT",
         "NEW_COMMENT",
-        "REPLY_COMMENT"
+        "REPLY_COMMENT" 
       ],
     },
     postId: {

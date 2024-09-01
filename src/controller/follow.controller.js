@@ -12,6 +12,7 @@ export const followUser = asyncHandler(async (req, res) => {
   const { userId: followerId } = req.user;
   const { followeeId } = req.params;
 
+
   if (followerId === followeeId) {
     throw new ApiError(400, "You cannot follow yourself");
   }
@@ -31,6 +32,7 @@ export const followUser = asyncHandler(async (req, res) => {
     if (existingFollowRequest) {
       throw new ApiError(409, "Request Already Sent", { isRequested: true });
     }
+
 
     const followRequest = await FollowRequest.create({
       requestedBy: followerId,
@@ -53,7 +55,7 @@ export const followUser = asyncHandler(async (req, res) => {
   const existingFollow = await Follow.findOne({ followerId, followeeId });
 
   if (existingFollow) {
-    throw new ApiError(404, "Already follows this user");
+    throw new ApiError(409, "ALREADY_FOLLOWING");
   }
 
   const follow = new Follow({
@@ -108,95 +110,95 @@ export const getFollowers = asyncHandler(async (req, res) => {
 
   const usernameMatchStage = username
     ? {
-        $lookup: {
-          from: "users",
-          let: { followerId: "$followerId" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$_id", "$$followerId"] },
-                    {
-                      $or: [
-                        {
-                          $regexMatch: {
-                            input: "$username",
-                            regex: `.*${username}.*`,
-                            options: "i",
-                          },
-                        },
-                        {
-                          $regexMatch: {
-                            input: "$name",
-                            regex: `.*${username}.*`,
-                            options: "i",
-                          },
-                        },
-                      ],
-                    },
-                  ],
-                },
-              },
-            },
-          ],
-          as: "followers",
-        },
-      }
-    : {
-        $lookup: {
-          from: "users",
-          localField: "followerId",
-          foreignField: "_id",
-          as: "followers",
-          pipeline: [
-            {
-              $lookup: {
-                from: "follows",
-                localField: "_id",
-                foreignField: "followerId",
-                as: "follow",
-                pipeline: [
+      $lookup: {
+        from: "users",
+        let: { followerId: "$followerId" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$_id", "$$followerId"] },
                   {
-                    $match: {
-                      followeeId: new mongoose.Types.ObjectId(currentUserId),
-                    },
+                    $or: [
+                      {
+                        $regexMatch: {
+                          input: "$username",
+                          regex: `.*${username}.*`,
+                          options: "i",
+                        },
+                      },
+                      {
+                        $regexMatch: {
+                          input: "$name",
+                          regex: `.*${username}.*`,
+                          options: "i",
+                        },
+                      },
+                    ],
                   },
                 ],
               },
             },
-            {
-              $addFields: {
-                isFollow: {
-                  $cond: {
-                    if: {
-                      $gte: [
-                        {
-                          $size: "$follow",
-                        },
-                        1,
-                      ],
-                    },
-                    then: true,
-                    else: false,
+          },
+        ],
+        as: "followers",
+      },
+    }
+    : {
+      $lookup: {
+        from: "users",
+        localField: "followerId",
+        foreignField: "_id",
+        as: "followers",
+        pipeline: [
+          {
+            $lookup: {
+              from: "follows",
+              localField: "_id",
+              foreignField: "followerId",
+              as: "follow",
+              pipeline: [
+                {
+                  $match: {
+                    followeeId: new mongoose.Types.ObjectId(currentUserId),
                   },
+                },
+              ],
+            },
+          },
+          {
+            $addFields: {
+              isFollow: {
+                $cond: {
+                  if: {
+                    $gte: [
+                      {
+                        $size: "$follow",
+                      },
+                      1,
+                    ],
+                  },
+                  then: true,
+                  else: false,
                 },
               },
             },
+          },
 
-            {
-              $project: {
-                _id: 1,
-                username: 1,
-                name: 1,
-                avatar: 1,
-                isFollow: 1,
-                follow: 1,
-              },
+          {
+            $project: {
+              _id: 1,
+              username: 1,
+              name: 1,
+              avatar: 1,
+              isFollow: 1,
+              follow: 1,
             },
-          ],
-        },
-      };
+          },
+        ],
+      },
+    };
 
   const followers = Follow.aggregate([
     matchStage,
@@ -257,116 +259,116 @@ export const getFollowing = asyncHandler(async (req, res) => {
 
   const usernameMatchStage = username
     ? {
-        $lookup: {
-          from: "users",
-          let: { followeeId: "$followeeId" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$_id", "$$followeeId"] },
-                    {
-                      $regexMatch: {
-                        input: "$username",
-                        regex: `^${username}`,
-                        options: "i",
-                      },
+      $lookup: {
+        from: "users",
+        let: { followeeId: "$followeeId" },
+        pipeline: [
+          {
+            $match: {
+              $expr: {
+                $and: [
+                  { $eq: ["$_id", "$$followeeId"] },
+                  {
+                    $regexMatch: {
+                      input: "$username",
+                      regex: `^${username}`,
+                      options: "i",
                     },
-                  ],
-                },
+                  },
+                ],
               },
             },
-          ],
-          as: "following",
-        },
-      }
+          },
+        ],
+        as: "following",
+      },
+    }
     : {
-        $lookup: {
-          from: "users",
-          localField: "followeeId",
-          foreignField: "_id",
-          as: "following",
-          pipeline: [
-            {
-              $lookup: {
-                from: "follows",
-                localField: "_id",
-                foreignField: "followeeId",
-                as: "follow",
-                pipeline: [
-                  {
-                    $match: {
-                      followerId: new mongoose.Types.ObjectId(currentUserId),
-                    },
-                  },
-                ],
-              },
-            },
-            {
-              $lookup: {
-                from: "followrequests",
-                localField: "_id",
-                foreignField: "requestedTo",
-                as: "request",
-                pipeline: [
-                  {
-                    $match: {
-                      requestedBy: new mongoose.Types.ObjectId(currentUserId),
-                      requestStatus: "PENDING",
-                    },
-                  },
-                ],
-              },
-            },
-            {
-              $addFields: {
-                isFollow: {
-                  $cond: {
-                    if: {
-                      $gte: [
-                        {
-                          $size: "$follow",
-                        },
-                        1,
-                      ],
-                    },
-                    then: true,
-                    else: false,
+      $lookup: {
+        from: "users",
+        localField: "followeeId",
+        foreignField: "_id",
+        as: "following",
+        pipeline: [
+          {
+            $lookup: {
+              from: "follows",
+              localField: "_id",
+              foreignField: "followeeId",
+              as: "follow",
+              pipeline: [
+                {
+                  $match: {
+                    followerId: new mongoose.Types.ObjectId(currentUserId),
                   },
                 },
-                isRequested: {
-                  $cond: {
-                    if: {
-                      $gte: [
-                        {
-                          $size: "$request",
-                        },
-                        1,
-                      ],
-                    },
-                    then: true,
-                    else: false,
+              ],
+            },
+          },
+          {
+            $lookup: {
+              from: "followrequests",
+              localField: "_id",
+              foreignField: "requestedTo",
+              as: "request",
+              pipeline: [
+                {
+                  $match: {
+                    requestedBy: new mongoose.Types.ObjectId(currentUserId),
+                    requestStatus: "PENDING",
                   },
+                },
+              ],
+            },
+          },
+          {
+            $addFields: {
+              isFollow: {
+                $cond: {
+                  if: {
+                    $gte: [
+                      {
+                        $size: "$follow",
+                      },
+                      1,
+                    ],
+                  },
+                  then: true,
+                  else: false,
+                },
+              },
+              isRequested: {
+                $cond: {
+                  if: {
+                    $gte: [
+                      {
+                        $size: "$request",
+                      },
+                      1,
+                    ],
+                  },
+                  then: true,
+                  else: false,
                 },
               },
             },
+          },
 
-            {
-              $project: {
-                _id: 1,
-                username: 1,
-                name: 1,
-                isFollow: 1,
-                follow: 1,
-                isPrivate: 1,
-                isRequested: 1,
-                avatar:1,
-              },
+          {
+            $project: {
+              _id: 1,
+              username: 1,
+              name: 1,
+              isFollow: 1,
+              follow: 1,
+              isPrivate: 1,
+              isRequested: 1,
+              avatar: 1,
             },
-          ],
-        },
-      };
+          },
+        ],
+      },
+    };
 
   const followings = Follow.aggregate([
     matchStage,
@@ -453,6 +455,5 @@ export const getAllFollowers = asyncHandler(async (req, res) => {
     })
   );
 
-  const follows = await Follow.find().populate("followerId followeeId");
   return res.status(200).json(paginatedFollowers);
 });

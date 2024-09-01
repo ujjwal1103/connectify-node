@@ -5,11 +5,9 @@ import { ApiError } from "../utils/ApiError.js";
 
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    console.log(file,cb,'from multer')
     cb(null, "public/images");
   },
   filename: function (req, file, cb) {
-    
     if (file) {
       cb(null, file?.originalname || "");
     }
