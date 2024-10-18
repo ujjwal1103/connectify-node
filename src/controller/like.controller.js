@@ -25,11 +25,11 @@ const like = asyncHandler(async (req, res) => {
   if (!postId && commentId) {
     newLike.commentId = commentId;
   }
-
+  console.log(newLike)
   const isLiked = await Like.findOne(newLike);
 
   if (isLiked) {
-    throw new ApiError(400, "Invalid Action");
+    throw new ApiError(400, "Invalid Action", isLiked);
   }
 
   const liked = await Like.create(newLike);
@@ -56,7 +56,7 @@ const like = asyncHandler(async (req, res) => {
 const unlike = asyncHandler(async (req, res) => {
   const { postId, commentId } = req.query;
   const { userId } = req.user;
-
+  console.log(commentId, postId)
   const newLike = {
     likedBy: userId,
   };
@@ -65,15 +65,14 @@ const unlike = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Reference Id is missing");
   }
 
-  if (!commentId && postId) {
+  if (postId) {
     newLike.postId = postId;
   }
 
-  if (!postId && commentId) {
+  if (commentId) {
     newLike.commentId = commentId;
   }
   const deletedLike = await Like.findOneAndDelete(newLike);
-  console.log(deletedLike, postId, commentId, newLike);
 
   res.status(200).json({
     liked: deletedLike,
@@ -188,7 +187,7 @@ const fetchlikes = asyncHandler(async (req, res) => {
   return res.status(200).json({ likes });
 });
 
-//admine
+//admine  
 
 const fetchAllLikes = asyncHandler(async (req, res) => {
   const { page = 1, limit = 20 } = req.query;

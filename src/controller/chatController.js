@@ -6,7 +6,7 @@ import { ApiError } from "./../utils/ApiError.js";
 import mongoose from "mongoose";
 import Message from "../models/message.modal.js";
 import { checkObjectId, emitEvent } from "../utils/index.js";
-import { REFECTCH_CHATS } from "../utils/constant.js";
+import { REFECTCH_CHATS, NEW_CHAT } from "../utils/constant.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
 
 export const createChat = asyncHandler(async (req, res) => {
@@ -73,7 +73,7 @@ export const createChat = asyncHandler(async (req, res) => {
 
   delete chat.members;
 
-  emitEvent(req, REFECTCH_CHATS, [friend._id]);
+  emitEvent(req, NEW_CHAT, [friend._id], { ...chat, friend });
 
   return res.status(201).json({
     isSuccess: true,
@@ -186,6 +186,7 @@ export const updateGroupName = asyncHandler(async (req, res) => {
 export const getAllChats = async (req, res) => {
   const { userId } = req.user;
   const { search } = req.query;
+
   try {
     let pipeline = [
       {
@@ -246,6 +247,36 @@ export const getAllChats = async (req, res) => {
         },
       },
       {
+        $lookup: {
+          from: "messages",
+          let: { chatId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$chat", "$$chatId"] },
+                    { $ne: ["$from", new mongoose.Types.ObjectId(userId)] },
+                    { $eq: ["$seen", false] },
+                  ],
+                },
+              },
+            },
+            {
+              $count: "unseenCount",
+            },
+          ],
+          as: "unseenMessages",
+        },
+      },
+      {
+        $addFields: {
+          unseenMessagesCount: {
+            $ifNull: [{ $arrayElemAt: ["$unseenMessages.unseenCount", 0] }, 0],
+          },
+        },
+      },
+      {
         $match: {
           "friend.username": { $regex: search || "", $options: "i" },
         },
@@ -253,6 +284,7 @@ export const getAllChats = async (req, res) => {
       {
         $project: {
           __v: 0,
+          unseenMessages: 0,
         },
       },
       {
@@ -274,6 +306,7 @@ export const getAllChats = async (req, res) => {
     });
   }
 };
+
 
 export const getChatById = asyncHandler(async (req, res) => {
   const { chatId } = req.params;

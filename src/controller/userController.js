@@ -218,14 +218,14 @@ export const registerUser = asyncHandler(async (req, res) => {
   const salt = bcrypt.genSaltSync(10);
   const hash = bcrypt.hashSync(password, salt);
 
-  await User.create({ 
-    email, 
+  await User.create({
+    email,
     password: hash,
     name,
     username: username.toLowerCase(),
   });
 
-  const user = await User.findOne({ username: username?.toLowerCase() }) 
+  const user = await User.findOne({ username: username?.toLowerCase() })
     .select("username email name")
     .lean();
 
@@ -808,6 +808,7 @@ export const createNewUser = asyncHandler(async (req, res) => {
 
 export const editNewUser = asyncHandler(async (req, res) => {
   const { userId } = req.params;
+  console.log(req.body)
 
   const user = await User.findByIdAndUpdate(
     userId,
@@ -862,6 +863,20 @@ export const getUserByUsernameA = asyncHandler(async (req, res) => {
   }
 
   const user = await User.findOne({ username }).lean();
+  if (!user) {
+    throw new ApiError(404, "username not found");
+  }
+  res.status(200).json({ user: user, message: "userFetched SuccessFully" });
+});
+
+export const getUserByUserId = asyncHandler(async (req, res) => {
+  const { userId } = req.params;
+
+  if (!userId) {
+    throw new ApiError(404, "username not found");
+  }
+
+  const user = await User.findById(userId).lean();
   if (!user) {
     throw new ApiError(404, "username not found");
   }

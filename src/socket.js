@@ -24,7 +24,6 @@ export const runSocket = () => {
 
       socket.on(SEEN_MESSAGES, (data) => {
         if (data) {
-          console.log('data seen')
           const sockets = getSockets([data.to]);
           io.to(sockets).emit(SEEN_MESSAGES, data);
           Message.findByIdAndUpdate(data.message, { seen: true })

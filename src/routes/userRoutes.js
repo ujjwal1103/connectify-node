@@ -24,6 +24,7 @@ import {
   updateProfilePicture,
   removeProfilePicture,
   getSendUsers,
+  getUserByUserId,
 } from "../controller/userController.js";
 import { upload, validateUsername, verifyToken } from "../middleware/index.js";
 const router = express.Router();
@@ -55,7 +56,8 @@ router.delete("/avatar", verifyToken, removeProfilePicture);
 router.get("/admin/users", getAllUsers);
 router.get("/admin/usersIds", getAllUsersIds);
 router.get("/admin/dashboard", dashboardData);
-router.get("/admin/user/:username", getUserByUsernameA);
+// router.get("/admin/user/:username", getUserByUsernameA);
+router.get("/admin/user/:userId", getUserByUserId);
 
 //! post routes
 router.post("/admin/user", createNewUser);

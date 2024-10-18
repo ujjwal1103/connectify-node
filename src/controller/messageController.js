@@ -148,9 +148,9 @@ export const sendMessage = async (req, res) => {
       { new: true }
     );
 
+    const event = `chat:${chat}:message`
 
-
-    emitEvent(req, NEW_MESSAGE, [...existingChat.members.filter(mem => mem.toString() !== from)], {
+    emitEvent(req, event, [...existingChat.members.filter(mem => mem.toString() !== from)], {
       to,
       chat,
       from,
@@ -313,7 +313,9 @@ export const sendMessageToUsers = asyncHandler(async (req, res) => {
     followeeId: userId,
   });
 
-  emitEvent(req, NEW_MESSAGE, [mm[0]?.from, mm[0].to], {
+  const event = `chat:${chat}:message`
+
+  emitEvent(req, event, [mm[0]?.from, mm[0].to], {
     to: userId,
     chat: chat?._id,
     from,
@@ -393,8 +395,9 @@ export const sendAttachments = async (req, res) => {
       { new: true }
     );
 
+    const event = `chat:${chat}:message`
 
-    emitEvent(req, NEW_MESSAGE, [...existingChat.members.filter(mem => mem.toString() !== from)], {
+    emitEvent(req, event, [...existingChat.members.filter(mem => mem.toString() !== from)], {
       to,
       chat,
       from,
@@ -416,7 +419,7 @@ export const sendAttachments = async (req, res) => {
 
 export const getMessagesInChat = async (req, res) => {
   const { chat } = req.params;
-  const { page = 1, limit = 20 } = req.query;
+  const { page = 1, limit = 25 } = req.query;
   const { userId } = req.user;
   try {
     const unreadMessages = await Message.aggregate([
@@ -532,6 +535,9 @@ export const getMessagesInChat = async (req, res) => {
           sender: {
             $first: "$sender",
           },
+          isCurrentUserMessage: {
+            $eq: ["$from", new mongoose.Types.ObjectId(userId)],
+          },
         },
       },
     ]);
@@ -549,10 +555,9 @@ export const getMessagesInChat = async (req, res) => {
       emitEvent(
         req,
         SEEN_MESSAGES,
-        [paginatedPosts[0]?.from, paginatedPosts[0]?.to],
+        [paginatedPosts.messages[0]?.from, paginatedPosts.messages[0]?.to],
         {
           chat,
-          idsOnly,
         }
       );
     }
@@ -560,6 +565,7 @@ export const getMessagesInChat = async (req, res) => {
     return res.status(200).json({
       isSuccess: true,
       ...paginatedPosts,
+      idsOnly
     });
   } catch (error) {
     console.log(error)
