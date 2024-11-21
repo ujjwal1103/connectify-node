@@ -318,7 +318,7 @@ export const getAllChats = async (req, res) => {
             { "groupName": { $regex: search || "", $options: "i" } }
           ]
         }
-      }
+      },
       {
         $project: {
           __v: 0,
