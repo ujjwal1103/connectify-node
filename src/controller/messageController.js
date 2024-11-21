@@ -115,7 +115,8 @@ export const sendMessage = async (req, res) => {
       });
     }
     // Check if the user sending the message is a participant in the chat
-    if (!existingChat.members.includes(from)) {
+    const members = existingChat.members.map(m=>m.user)
+    if (!members.includes(from)) {
       return res.status(403).json({
         error: "You are not a participant in this chat",
         isSuccess: false,
@@ -150,7 +151,7 @@ export const sendMessage = async (req, res) => {
 
     const event = `chat:${chat}:message`
 
-    emitEvent(req, event, [...existingChat.members.filter(mem => mem.toString() !== from)], {
+    emitEvent(req, event, [...existingChat.members.filter(mem => mem.user.toString() !== from)], {
       to,
       chat,
       from,
@@ -343,8 +344,8 @@ export const sendAttachments = async (req, res) => {
         isSuccess: false,
       });
     }
-
-    if (!existingChat.members.includes(from)) {
+    const members = existingChat.members.map(m=>m.user)
+    if (!members.includes(from)) {
       return res.status(403).json({
         error: "You are not a participant in this chat",
         isSuccess: false,
@@ -397,7 +398,7 @@ export const sendAttachments = async (req, res) => {
 
     const event = `chat:${chat}:message`
 
-    emitEvent(req, event, [...existingChat.members.filter(mem => mem.toString() !== from)], {
+    emitEvent(req, event, [...existingChat.members.filter(mem => mem.user.toString() !== from)], {
       to,
       chat,
       from,
