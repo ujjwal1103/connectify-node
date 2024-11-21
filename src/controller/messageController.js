@@ -115,7 +115,9 @@ export const sendMessage = async (req, res) => {
       });
     }
     // Check if the user sending the message is a participant in the chat
-    const members = existingChat.members.map(m=>m.user)
+    const members = existingChat.members.map(m=>m.user.toString())
+    console.log(members);
+
     if (!members.includes(from)) {
       return res.status(403).json({
         error: "You are not a participant in this chat",
@@ -344,7 +346,9 @@ export const sendAttachments = async (req, res) => {
         isSuccess: false,
       });
     }
-    const members = existingChat.members.map(m=>m.user)
+    const members = existingChat.members.map(m=>m.user.toString())
+    console.log(members);
+    
     if (!members.includes(from)) {
       return res.status(403).json({
         error: "You are not a participant in this chat",
