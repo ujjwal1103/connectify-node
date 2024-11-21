@@ -28,13 +28,12 @@ export const createChat = asyncHandler(async (req, res) => {
   }
 
   const existingChat = await Chat.findOne({
-    members: {
-      $all: members,  // Ensure all specified users are present
-      $size: 2,  // Ensure the array length matches exactly
-    },
+    isGroup: false, // Ensure this is a one-to-one chat
+    "members.user": { $all: [userId, to] }, // Both users must be present
+    members: { $size: 2 }, // Ensure the chat is only between two users
   })
     .populate({
-      path: "members lastMessage",
+      path: "members.user lastMessage",
       select: "name username _id avatar text from",
     })
     .lean();
@@ -49,26 +48,32 @@ export const createChat = asyncHandler(async (req, res) => {
     });
   }
 
-  //5497433 ticket
   const uniqueMembers = Array.from(new Set(members));
 
   if (uniqueMembers.length < 2) {
     throw new ApiError(400, "The chat must have at least two unique members.");
   }
+
   const newChat = new Chat({
-    members: uniqueMembers,
+    isGroup: false,
+    members: [
+      { user: userId, role: "member" },
+      { user: to, role: "member" },
+    ],
   });
 
   const savedChat = await newChat.save();
 
+  // Fetch the saved chat with populated fields
   const chat = await Chat.findById(savedChat._id)
     .populate({
-      path: "members lastMessage",
+      path: "members.user lastMessage",
       select: "name username _id avatar text from",
     })
     .lean();
-  const friend = await chat.members.find(
-    (member) => member._id.toString() !== userId
+
+  const friend = chat.members.find(
+    (member) => member.user._id.toString() !== userId
   );
 
   delete chat.members;
@@ -86,24 +91,30 @@ export const createGroup = asyncHandler(async (req, res) => {
     user: { userId },
     body: { users, groupName },
   } = req;
-  const allUsers = JSON.parse(users);
-  const members = [userId, ...allUsers];
 
-  if (allUsers?.some((user) => user === userId)) {
+  // Parse users from request body
+  const allUsers = JSON.parse(users);
+  const groupMembers = allUsers.map((user) => ({ user, role: "member" }));
+
+  // Check for duplicate user (group creator in member list)
+  if (allUsers.some((user) => user === userId)) {
     throw new ApiError(
       400,
-      "The 'to' array cannot contain the same user as the 'from' user."
+      "The group members list cannot include the group creator."
     );
   }
 
+  // Add group creator as admin
+  const members = [{ user: userId, role: "admin" }, ...groupMembers];
+
+  // Check for an existing group with the same members
   const existingChat = await Chat.findOne({
-    members: {
-      $all: members,  // Ensure all specified users are present
-      $size: members.length,  // Ensure the array length matches exactly
-    },
+    isGroup: true, // Ensure it's a group chat
+    "members.user": { $all: members.map((member) => member.user) }, // Match all users
+    members: { $size: members.length }, // Ensure exact size
   })
     .populate({
-      path: "members lastMessage",
+      path: "members.user lastMessage",
       select: "name username _id avatar text from",
     })
     .lean();
@@ -112,16 +123,70 @@ export const createGroup = asyncHandler(async (req, res) => {
     return res.status(201).json({
       isSuccess: true,
       isExisting: true,
-      chat: { ...existingChat },
+      chat: existingChat,
     });
   }
 
-  const uniqueMembers = Array.from(new Set(members));
-
-  if (uniqueMembers.length < 2) {
-    throw new ApiError(400, "The chat must have at least two unique members.");
-  }
+  // Upload group avatar if provided
   let groupAvatar = null;
+  if (req.file) {
+    const resp = await uploadOnCloudinary(
+      req.file.path,
+      `${userId}/groupAvatars`,
+      { gravity: "face", aspect_ratio: 1, crop: "fill", type: "instagram" }
+    );
+
+    groupAvatar = {
+      url: resp.url,
+      publicId: resp.public_id,
+    };
+
+    if (!groupAvatar) {
+      throw new ApiError(400, "Failed to upload group avatar.");
+    }
+  }
+
+  // Create a new group chat
+  const newChat = new Chat({
+    members,
+    isGroup: true,
+    groupAvatar,
+    groupName,
+    createdBy: userId,
+  });
+
+  const savedChat = await newChat.save();
+
+  // Fetch the newly created group chat with populated fields
+  const chat = await Chat.findById(savedChat._id)
+    .populate({
+      path: "members.user lastMessage",
+      select: "name username _id avatar text from",
+    })
+    .lean();
+
+  // Emit event to notify users
+  emitEvent(req, REFECTCH_CHATS, allUsers);
+
+  return res.status(201).json({
+    isSuccess: true,
+    chat,
+  });
+});
+
+export const updateGroup = asyncHandler(async (req, res) => {
+  const {
+    user: {userId},
+    params: { chatId },
+    body: { name },
+  } = req;
+
+  const chat = await Chat.findById(chatId)
+
+  if(!chat.isGroup) {
+    throw new ApiError(404, "Invalid Action");
+  }
+  let groupAvatar=chat.groupAvatar;
   if (req.file) {
     const resp = await uploadOnCloudinary(
       req.file.path,
@@ -138,78 +203,48 @@ export const createGroup = asyncHandler(async (req, res) => {
       throw new ApiError(400, "Failed to upload profile pIcture");
   }
 
-  const newChat = new Chat({
-    members: uniqueMembers,
-    isGroup: true,
-    groupAdmin: userId,
-    groupAvatar: groupAvatar,
-    groupName: groupName,
-  });
-
-  const savedChat = await newChat.save();
-
-  const chat = await Chat.findById(savedChat._id)
-    .populate({
-      path: "members lastMessage",
-      select: "name username _id avatar text from",
-    })
-    .lean();
-
-  delete chat.members;
-
-  emitEvent(req, REFECTCH_CHATS, [...users]);
-
-  return res.status(201).json({
-    isSuccess: true,
-    chat: { ...chat },
-  });
-});
-export const updateGroupName = asyncHandler(async (req, res) => {
-  const {
-    params: { chatId },
-    body: { name },
-  } = req;
-
-  const chat = await Chat.findByIdAndUpdate(
+  const updatedGroup = await Chat.findByIdAndUpdate(
     chatId,
-    {
+     {
       groupName: name,
+      groupAvatar: groupAvatar
     },
     { new: true }
   );
   return res.status(201).json({
     isSuccess: true,
-    chat,
+    chat:updatedGroup,
   });
 });
 
 export const getAllChats = async (req, res) => {
   const { userId } = req.user;
   const { search } = req.query;
-
   try {
     let pipeline = [
       {
         $match: {
-          members: { $in: [new mongoose.Types.ObjectId(userId)] },
+          "members.user": new mongoose.Types.ObjectId(userId), // Match based on `user` field inside `members`
         },
       },
       {
         $lookup: {
           from: "users",
-          localField: "members",
+          localField: "members.user", // Lookup for `user` field in `members`
           foreignField: "_id",
-          as: "members",
+
+          as: "userDetails",
           pipeline: [
             {
               $project: {
                 username: 1,
                 name: 1,
                 avatar: 1,
-              },
+              },   
             },
           ],
         },
+        
       },
       {
         $lookup: {
@@ -232,7 +267,7 @@ export const getAllChats = async (req, res) => {
             $arrayElemAt: [
               {
                 $filter: {
-                  input: "$members",
+                  input: "$userDetails",
                   cond: {
                     $ne: ["$$this._id", new mongoose.Types.ObjectId(userId)],
                   },
@@ -292,11 +327,13 @@ export const getAllChats = async (req, res) => {
       },
     ];
 
-    const aggrigatedChats = await Chat.aggregate(pipeline);
-
+    const aggregatedChats = await Chat.aggregate(pipeline);
+    
+    console.log(aggregatedChats);
+  
     return res.status(201).json({
       isSuccess: true,
-      chats: aggrigatedChats,
+      chats: aggregatedChats,
     });
   } catch (error) {
     console.log(error);
@@ -307,13 +344,12 @@ export const getAllChats = async (req, res) => {
   }
 };
 
-
 export const getChatById = asyncHandler(async (req, res) => {
   const { chatId } = req.params;
   const { userId } = req.user;
 
   if (!checkObjectId(chatId)) {
-    throw new ApiError(404, "Chat Not found");
+    throw new ApiError(404, "Chat not found");
   }
 
   let pipeline = [
@@ -325,9 +361,9 @@ export const getChatById = asyncHandler(async (req, res) => {
     {
       $lookup: {
         from: "users",
-        localField: "members",
+        localField: "members.user", // Lookup for `user` field in `members`
         foreignField: "_id",
-        as: "members",
+        as: "userDetails",
         pipeline: [
           {
             $project: {
@@ -360,7 +396,7 @@ export const getChatById = asyncHandler(async (req, res) => {
           $arrayElemAt: [
             {
               $filter: {
-                input: "$members",
+                input: "$userDetails",
                 cond: {
                   $ne: ["$$this._id", new mongoose.Types.ObjectId(userId)],
                 },
@@ -377,6 +413,7 @@ export const getChatById = asyncHandler(async (req, res) => {
     {
       $project: {
         __v: 0,
+        userDetails: 0, // Exclude extra user details after extracting the `friend` field
       },
     },
     {
@@ -384,17 +421,18 @@ export const getChatById = asyncHandler(async (req, res) => {
     },
   ];
 
-  const aggrigatedChats = await Chat.aggregate(pipeline);
+  const aggregatedChats = await Chat.aggregate(pipeline);
 
-  if (!aggrigatedChats[0]) {
+  if (!aggregatedChats[0]) {
     throw new ApiError(400, "Chat not found");
   }
 
   return res.status(200).json({
     isSuccess: true,
-    chat: aggrigatedChats[0],
+    chat: aggregatedChats[0],
   });
 });
+
 
 export const deleteChatById = async (req, res) => {
   const { chatId } = req.params;
@@ -508,3 +546,149 @@ export const chatUsers = asyncHandler(async (req, res) => {
     isSuccess: true,
   });
 });
+
+export const addGroupMembers = asyncHandler(async (req, res) => {
+  const { chatId } = req.params;
+  const { newMembers } = req.body; // Expecting an array of user IDs in the request body
+  const { userId } = req.user;
+
+  if (!checkObjectId(chatId)) {
+    throw new ApiError(404, "Group not found");
+  }
+
+  const chat = await Chat.findById(chatId);
+
+  if (!chat) {
+    throw new ApiError(404, "Group not found");
+  }
+
+  if (!chat.isGroup) {
+    throw new ApiError(400, "This operation is only allowed for group chats");
+  }
+
+  // Check if the user is an admin
+  const isAdmin = chat.members.some(
+    (member) => member.user.toString() === userId && member.role === "admin"
+  );
+
+  if (!isAdmin) {
+    throw new ApiError(403, "You are not authorized to add members to this group");
+  }
+
+  const uniqueNewMembers = Array.from(new Set(newMembers)); // Avoid duplicate IDs
+  const existingMemberIds = chat.members.map((member) => member.user.toString());
+
+  const membersToAdd = uniqueNewMembers.filter(
+    (memberId) => !existingMemberIds.includes(memberId)
+  );
+
+  if (membersToAdd.length === 0) {
+    return res.status(400).json({
+      isSuccess: false,
+      message: "All provided members are already in the group",
+    });
+  }
+
+  const newMemberObjects = membersToAdd.map((memberId) => ({
+    user: memberId,
+    role: "member", // Default role for new members
+  }));
+
+  chat.members.push(...newMemberObjects);
+  await chat.save();
+
+  return res.status(200).json({
+    isSuccess: true,
+    message: "Members added successfully",
+    chat,
+  });
+});
+
+export const removeGroupMember = asyncHandler(async (req, res) => {
+  const { chatId } = req.params;
+  const { memberId } = req.body; // ID of the member to remove
+  const { userId } = req.user;
+
+  if (!checkObjectId(chatId) || !checkObjectId(memberId)) {
+    throw new ApiError(404, "Invalid group or member ID");
+  }
+
+  const chat = await Chat.findById(chatId);
+
+  if (!chat) {
+    throw new ApiError(404, "Group not found");
+  }
+
+  if (!chat.isGroup) {
+    throw new ApiError(400, "This operation is only allowed for group chats");
+  }
+
+  // Check if the user is an admin
+  const isAdmin = chat.members.some(
+    (member) => member.user.toString() === userId && member.role === "admin"
+  );
+
+  if (!isAdmin) {
+    throw new ApiError(403, "You are not authorized to remove members from this group");
+  }
+
+  const memberIndex = chat.members.findIndex(
+    (member) => member.user.toString() === memberId
+  );
+
+  if (memberIndex === -1) {
+    throw new ApiError(404, "The specified member is not in the group");
+  }
+
+  // Prevent removing the last admin
+  if (chat.members[memberIndex].role === "admin") {
+    const adminCount = chat.members.filter((member) => member.role === "admin").length;
+
+    if (adminCount === 1) {
+      throw new ApiError(400, "Cannot remove the only admin from the group");
+    }
+  }
+
+  chat.members.splice(memberIndex, 1); // Remove the member
+  await chat.save();
+
+  return res.status(200).json({
+    isSuccess: true,
+    message: "Member removed successfully",
+    chat,
+  });
+});
+
+
+
+export const removeGroupAvatar = asyncHandler(async (req, res) => {
+  const {
+    user: { userId },
+    params: { chatId },
+  } = req;
+
+  const chat = await Chat.findById(chatId);
+
+  let groupAvatar = chat.groupAvatar;
+
+  if (groupAvatar && groupAvatar.publicId) {
+      await deleteFromCloudinary([groupAvatar.publicId]);
+  }
+
+  groupAvatar = null;
+
+  const updatedGroup = await Chat.findByIdAndUpdate(
+    chatId,
+    {
+      groupAvatar: groupAvatar,
+    },
+    { new: true }
+  );
+
+  return res.status(201).json({
+    isSuccess: true,
+    chat: updatedGroup,
+  });
+});
+
+

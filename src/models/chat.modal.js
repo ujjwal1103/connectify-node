@@ -15,9 +15,16 @@ const chatSchema = new mongoose.Schema(
   {
     members: [
       {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: [true, "members cannot be empty"],
+        user: {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
+        },
+        role: {
+          type: String,
+          enum: ["admin", "member"],
+          default: "member",
+        },
       },
     ],
     isGroup: {
