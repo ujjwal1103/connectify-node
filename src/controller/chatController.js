@@ -233,7 +233,7 @@ export const getAllChats = async (req, res) => {
           localField: "members.user", // Lookup for `user` field in `members`
           foreignField: "_id",
 
-          as: "userDetails",
+          as: "membersInfo",
           pipeline: [
             {
               $project: {
@@ -267,7 +267,7 @@ export const getAllChats = async (req, res) => {
             $arrayElemAt: [
               {
                 $filter: {
-                  input: "$userDetails",
+                  input: "$membersInfo",
                   cond: {
                     $ne: ["$$this._id", new mongoose.Types.ObjectId(userId)],
                   },
@@ -313,9 +313,12 @@ export const getAllChats = async (req, res) => {
       },
       {
         $match: {
-          "friend.username": { $regex: search || "", $options: "i" },
-        },
-      },
+          $or: [
+            { "friend.username": { $regex: search || "", $options: "i" } },
+            { "groupName": { $regex: search || "", $options: "i" } }
+          ]
+        }
+      }
       {
         $project: {
           __v: 0,
@@ -327,10 +330,7 @@ export const getAllChats = async (req, res) => {
       },
     ];
 
-    const aggregatedChats = await Chat.aggregate(pipeline);
-    
-    console.log(aggregatedChats);
-  
+    const aggregatedChats = await Chat.aggregate(pipeline);  
     return res.status(201).json({
       isSuccess: true,
       chats: aggregatedChats,
@@ -361,9 +361,9 @@ export const getChatById = asyncHandler(async (req, res) => {
     {
       $lookup: {
         from: "users",
-        localField: "members.user", // Lookup for `user` field in `members`
+        localField: "members.user",
         foreignField: "_id",
-        as: "userDetails",
+        as: "membersInfo",
         pipeline: [
           {
             $project: {
@@ -396,7 +396,7 @@ export const getChatById = asyncHandler(async (req, res) => {
           $arrayElemAt: [
             {
               $filter: {
-                input: "$userDetails",
+                input: "$membersInfo",
                 cond: {
                   $ne: ["$$this._id", new mongoose.Types.ObjectId(userId)],
                 },
@@ -413,11 +413,7 @@ export const getChatById = asyncHandler(async (req, res) => {
     {
       $project: {
         __v: 0,
-        userDetails: 0, // Exclude extra user details after extracting the `friend` field
       },
-    },
-    {
-      $sort: { updatedAt: -1 },
     },
   ];
 
