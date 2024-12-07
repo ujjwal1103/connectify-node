@@ -99,6 +99,13 @@ export const acceptFollowRequest = asyncHandler(async (req, res) => {
     requestStatus: reject ? "REJECTED" : "ACCEPTED",
   });
 
+  if(reject){
+    return res.status(200).json({
+      isSuccess: true,
+      followRequest: request
+    });
+  }
+
   if (!request) {
     throw new ApiError(404, "Invalid Request");
   }
