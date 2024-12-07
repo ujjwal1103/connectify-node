@@ -97,7 +97,7 @@ export const acceptFollowRequest = asyncHandler(async (req, res) => {
 
   const request = await FollowRequest.findByIdAndUpdate(requestId, {
     requestStatus: reject ? "REJECTED" : "ACCEPTED",
-  });
+  },{new:true});
 
   if(reject){
     return res.status(200).json({
