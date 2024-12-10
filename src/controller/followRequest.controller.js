@@ -9,7 +9,7 @@ import {
 import { Follow } from "../models/follow.model.js";
 import Notification from "../models/notification.modal.js";
 import { emitEvent } from "../utils/index.js";
-import { ACCEPT_REQUEST, NEW_REQUEST } from "../utils/constant.js";
+import { ACCEPT_REQUEST, NEW_REQUEST, REJECT_REQUEST } from "../utils/constant.js";
 
 export const sendFollowRequest = asyncHandler(async (req, res) => {
   const { userId: requestedBy } = req.user;
@@ -100,6 +100,8 @@ export const acceptFollowRequest = asyncHandler(async (req, res) => {
   },{new:true});
 
   if(reject){
+    const resp = await deleteNotification(request.requestedBy, request.requestedTo);
+    emitEvent(req,REJECT_REQUEST , [request.requestedBy, request.requestedTo], resp);
     return res.status(200).json({
       isSuccess: true,
       followRequest: request

@@ -2,11 +2,11 @@
   "name": "connectify",
   "version": "1.0.0",
   "description": "Connectify is the ultimate social networking platform designed to bring people together. Share moments, exchange ideas, and build meaningful connections with friends and like-minded individuals. Join our vibrant community and experience the power of connection like never before.",
-  "main": "src/index.js",
+  "main": "src/app.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "nodemon src/index.js"
+    "start": "node src/app.js",
+    "dev": "nodemon src/app.js"
   },
   "author": "Ujjwal Lade",
   "license": "ISC",

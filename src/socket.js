@@ -1,4 +1,4 @@
-import { io } from "./app.js";
+import { io } from "./index.js";
 import Message from "./models/message.modal.js";
 import { SEEN_MESSAGES } from "./utils/constant.js";
 import { getSockets } from "./utils/index.js";

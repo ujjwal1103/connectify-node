@@ -2,6 +2,7 @@ export const NEW_MESSAGE = "NEW_MESSAGE";
 export const NEW_CHAT = "NEW_CHAT";
 export const NEW_REQUEST = "NEW_REQUEST";
 export const ACCEPT_REQUEST = "ACCEPT_REQUEST";
+export const REJECT_REQUEST = "REJECT_REQUEST";
 export const LIKE_POST = "LIKE_POST";
 export const COMMENT_POST = "COMMENT_POST";
 export const NEW_COMMENT = "NEW_COMMENT";
