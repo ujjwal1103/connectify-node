@@ -583,7 +583,7 @@ export const updateProfilePicture = asyncHandler(async (req, res) => {
   );
 
   const avatar = {
-    url: resp.url,
+    url: resp.secure_url,
     publicId: resp.public_id,
   };
 

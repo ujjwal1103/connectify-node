@@ -584,7 +584,7 @@ export const getMessagesInChat = async (req, res) => {
 export const deleteMessage = async (req, res) => {
   const { messageId } = req.params;
   try {
-    const message = await Message.findById(messageId);
+    const message = await Message.findByIdAndDelete(messageId);
 
     if (!message) {
       return res.status(404).json({
@@ -592,11 +592,11 @@ export const deleteMessage = async (req, res) => {
         isSuccess: false,
       });
     }
-
-    // await message.remove();
+    
     return res.status(200).json({
       isSuccess: true,
       message: "Message deleted successfully",
+      mess: message
     });
   } catch (error) {
     return res.status(500).json({

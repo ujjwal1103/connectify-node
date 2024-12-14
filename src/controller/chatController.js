@@ -40,11 +40,12 @@ export const createChat = asyncHandler(async (req, res) => {
 
   if (existingChat) {
     const friend = existingChat.members.find(
-      (member) => member._id.toString() !== userId
+      (member) => member.user._id.toString() !== userId
     );
+  
     return res.status(201).json({
       isSuccess: true,
-      chat: { ...existingChat, friend: friend, new: false },
+      chat: { ...existingChat, friend: {...friend, ...friend.user}, new: false },
     });
   }
 
@@ -76,13 +77,14 @@ export const createChat = asyncHandler(async (req, res) => {
     (member) => member.user._id.toString() !== userId
   );
 
+
   delete chat.members;
 
   emitEvent(req, NEW_CHAT, [friend._id], { ...chat, friend });
 
   return res.status(201).json({
     isSuccess: true,
-    chat: { ...chat, friend: friend },
+    chat: { ...chat, friend: {...friend, ...friend.user} },
   });
 });
 
@@ -137,7 +139,7 @@ export const createGroup = asyncHandler(async (req, res) => {
     );
 
     groupAvatar = {
-      url: resp.url,
+      url: resp.secure_url,
       publicId: resp.public_id,
     };
 
@@ -195,7 +197,7 @@ export const updateGroup = asyncHandler(async (req, res) => {
     );
 
     groupAvatar = {
-      url: resp.url,
+      url: resp.secure_url,
       publicId: resp.public_id,
     };
 
@@ -220,19 +222,19 @@ export const updateGroup = asyncHandler(async (req, res) => {
 export const getAllChats = async (req, res) => {
   const { userId } = req.user;
   const { search } = req.query;
+
   try {
     let pipeline = [
       {
         $match: {
-          "members.user": new mongoose.Types.ObjectId(userId), // Match based on `user` field inside `members`
+          "members.user": new mongoose.Types.ObjectId(userId),
         },
       },
       {
         $lookup: {
           from: "users",
-          localField: "members.user", // Lookup for `user` field in `members`
+          localField: "members.user",
           foreignField: "_id",
-
           as: "membersInfo",
           pipeline: [
             {
@@ -330,10 +332,23 @@ export const getAllChats = async (req, res) => {
       },
     ];
 
-    const aggregatedChats = await Chat.aggregate(pipeline);  
+    const aggregatedChats = await Chat.aggregate(pipeline); 
+    const chats = aggregatedChats.map((chat)=>{
+      return {
+        ...chat,
+        membersInfo: undefined,
+        members: chat.members.map(member => ({
+          ...member,
+          ...chat.membersInfo.find(user => user._id.toString() === member.user.toString())
+        }))
+      }
+    })
+
+
+
     return res.status(201).json({
       isSuccess: true,
-      chats: aggregatedChats,
+      chats: chats,
     });
   } catch (error) {
     console.log(error);
@@ -423,9 +438,21 @@ export const getChatById = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Chat not found");
   }
 
+  const chats = aggregatedChats.map((chat)=>{
+    return {
+      ...chat,
+      membersInfo: undefined,
+      members: chat.members.map(member => ({
+        ...member,
+        ...chat.membersInfo.find(user => user._id.toString() === member.user.toString())
+      }))
+    }
+  })
+
+
   return res.status(200).json({
     isSuccess: true,
-    chat: aggregatedChats[0],
+    chat: chats[0],
   });
 });
 
