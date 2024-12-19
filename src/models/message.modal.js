@@ -17,8 +17,22 @@ const messageSchema = new mongoose.Schema(
         "VIDEO",
         "VOICE_MESSAGE",
         "POST_MESSAGE",
-        "GROUP_CREATED"
+        "SYSTEM"
       ],
+    },
+    systemMessageType:{
+      type: String ,
+      enum: [
+        "GROUP_CREATED",
+        "MEMBER_REMOVED",
+        "MEMBER_EXIT",
+        "MEMBERS_ADDED",
+        "AVATAR_REMOVED",
+        "AVATAR_CHANGED",
+        "GENERAL_MESSAGE",
+        "GROUP_NAME_CHANGED"
+      ],
+      default: null
     },
     attachments: {
       type: [String],
@@ -26,7 +40,6 @@ const messageSchema = new mongoose.Schema(
     to: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
     from: {
       type: mongoose.Schema.Types.ObjectId,

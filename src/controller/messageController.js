@@ -2,13 +2,12 @@ import mongoose from "mongoose";
 import Chat from "../models/chat.modal.js";
 import Message from "../models/message.modal.js";
 import { emitEvent, getMongoosePaginationOptions } from "../utils/index.js";
-import { NEW_MESSAGE, SEEN_MESSAGES } from "../utils/constant.js";
+import { SEEN_MESSAGES } from "../utils/constant.js";
 import asyncHandler from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";
 import { uploadMultipleOnCloudinary } from "../utils/cloudinary.js";
 import User from "../models/user.modal.js";
 import { Follow } from "../models/follow.model.js";
-
 
 const getMessageAggregate = (chat) => {
   return [
@@ -115,8 +114,7 @@ export const sendMessage = async (req, res) => {
       });
     }
     // Check if the user sending the message is a participant in the chat
-    const members = existingChat.members.map(m=>m.user.toString())
-    console.log(members);
+    const members = existingChat.members.map(m => m.user.toString())
 
     if (!members.includes(from)) {
       return res.status(403).json({
@@ -173,6 +171,35 @@ export const sendMessage = async (req, res) => {
     });
   }
 };
+
+export const createSystemMessage = async (chatId, from, to, text, members, systemMessageType,req) => {
+  try {
+    const newMessage = new Message({
+      from,
+      text,
+      messageType: 'SYSTEM',
+      to,
+      chat: chatId,
+      systemMessageType
+    });
+
+    await newMessage.save();
+
+    const event = `chat:${chatId}:message`
+
+    emitEvent(req, event,members.map(m=>m.user), {
+      to,
+      chat: chatId,
+      from,
+      message: newMessage,
+    });
+
+    return newMessage;
+  } catch (error) {
+    throw error;
+  }
+}
+
 export const sendMessageToUsers = asyncHandler(async (req, res) => {
   const { userId: from } = req.user;
 
@@ -346,9 +373,9 @@ export const sendAttachments = async (req, res) => {
         isSuccess: false,
       });
     }
-    const members = existingChat.members.map(m=>m.user.toString())
+    const members = existingChat.members.map(m => m.user.toString())
     console.log(members);
-    
+
     if (!members.includes(from)) {
       return res.status(403).json({
         error: "You are not a participant in this chat",
@@ -422,11 +449,15 @@ export const sendAttachments = async (req, res) => {
   }
 };
 
-export const getMessagesInChat = async (req, res) => {
+export const getMessagesInChat =asyncHandler( async (req, res) => {
   const { chat } = req.params;
   const { page = 1, limit = 25 } = req.query;
   const { userId } = req.user;
-  try {
+
+    const existingChat = await Chat.findById(chat);
+    if(!existingChat){
+      throw new ApiError(404,"CHAT_NOT_FOUND");
+    }
     const unreadMessages = await Message.aggregate([
       {
         $match: {
@@ -572,14 +603,7 @@ export const getMessagesInChat = async (req, res) => {
       ...paginatedPosts,
       idsOnly
     });
-  } catch (error) {
-    console.log(error)
-    return res.status(500).json({
-      error: error.message,
-      isSuccess: false,
-    });
-  }
-};
+});
 
 export const deleteMessage = async (req, res) => {
   const { messageId } = req.params;
@@ -592,7 +616,7 @@ export const deleteMessage = async (req, res) => {
         isSuccess: false,
       });
     }
-    
+
     return res.status(200).json({
       isSuccess: true,
       message: "Message deleted successfully",
@@ -656,7 +680,6 @@ export const markMessageAsSeen = asyncHandler(async (req, res) => {
   });
 });
 
-
 export const reactMessage = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   const { messageId } = req.params;
@@ -669,3 +692,6 @@ export const reactMessage = asyncHandler(async (req, res) => {
     message
   });
 })
+
+
+

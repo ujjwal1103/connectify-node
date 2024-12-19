@@ -8,6 +8,30 @@ import Message from "../models/message.modal.js";
 import { checkObjectId, emitEvent } from "../utils/index.js";
 import { REFECTCH_CHATS, NEW_CHAT } from "../utils/constant.js";
 import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { createSystemMessage } from "./messageController.js";
+
+const chatsWithMembers = (chats) => {
+  return chats.map((chat) => {
+    return {
+      ...chat,
+      membersInfo: undefined,
+      members: chat.members.map(member => ({
+        ...member,
+        ...chat.membersInfo.find(user => user._id.toString() === member.user.toString())
+      }))
+    }
+  })
+}
+
+// systemMessageTypes
+// "GROUP_CREATED",
+// "MEMBER_REMOVED",
+// "MEMBER_EXIT",
+// "MEMBERS_ADDED",
+// "AVATAR_REMOVED",
+// "AVATAR_CHANGED",
+// "GENERAL_MESSAGE" 
+// "GROUP_NAME_CHANGED"
 
 export const createChat = asyncHandler(async (req, res) => {
   const {
@@ -42,10 +66,10 @@ export const createChat = asyncHandler(async (req, res) => {
     const friend = existingChat.members.find(
       (member) => member.user._id.toString() !== userId
     );
-  
+
     return res.status(201).json({
       isSuccess: true,
-      chat: { ...existingChat, friend: {...friend, ...friend.user}, new: false },
+      chat: { ...existingChat, friend: { ...friend, ...friend.user }, new: false },
     });
   }
 
@@ -84,13 +108,13 @@ export const createChat = asyncHandler(async (req, res) => {
 
   return res.status(201).json({
     isSuccess: true,
-    chat: { ...chat, friend: {...friend, ...friend.user} },
+    chat: { ...chat, friend: { ...friend, ...friend.user } },
   });
 });
 
 export const createGroup = asyncHandler(async (req, res) => {
   const {
-    user: { userId },
+    user: { userId, name },
     body: { users, groupName },
   } = req;
 
@@ -170,25 +194,45 @@ export const createGroup = asyncHandler(async (req, res) => {
   // Emit event to notify users
   emitEvent(req, REFECTCH_CHATS, allUsers);
 
+  const updatedChat = {
+    ...chat,
+    members: chat.members.map((m) => {
+      return {
+        ...m,
+        ...m.user,
+        user: undefined,
+      }
+    })
+  }
+
+  const newMessage = await createSystemMessage(chat._id, userId, allUsers[0], `${name} created this group.`, allUsers, "GROUP_CREATED", req)
+
   return res.status(201).json({
     isSuccess: true,
-    chat,
+    chat: updatedChat,
+    newMessage,
   });
 });
 
 export const updateGroup = asyncHandler(async (req, res) => {
   const {
-    user: {userId},
+    user: { userId, name: updater },
     params: { chatId },
     body: { name },
   } = req;
 
+  // Fetch user details for system message
+  const user = await User.findById(userId);
+  if (!user) {
+    throw new ApiError(404, "User not found");
+  }
+
   const chat = await Chat.findById(chatId)
 
-  if(!chat.isGroup) {
+  if (!chat.isGroup) {
     throw new ApiError(404, "Invalid Action");
   }
-  let groupAvatar=chat.groupAvatar;
+  let groupAvatar = chat.groupAvatar;
   if (req.file) {
     const resp = await uploadOnCloudinary(
       req.file.path,
@@ -207,15 +251,32 @@ export const updateGroup = asyncHandler(async (req, res) => {
 
   const updatedGroup = await Chat.findByIdAndUpdate(
     chatId,
-     {
+    {
       groupName: name,
       groupAvatar: groupAvatar
     },
     { new: true }
   );
+
+
+  if (name || req.file) {
+    const systemMessageType = name ? "GROUP_NAME_CHANGED" : "AVATAR_CHANGED";
+    const systemMessageContent = name
+      ? `${updater} changed the group name to "${name}".`
+      : `${updater} updated the group avatar.`;
+    await createSystemMessage(
+      chatId,
+      userId,
+      null, // No specific target user
+      systemMessageContent,
+      [], // No additional users
+      systemMessageType,
+      req
+    );
+  }
   return res.status(201).json({
     isSuccess: true,
-    chat:updatedGroup,
+    chat: updatedGroup,
   });
 });
 
@@ -242,11 +303,11 @@ export const getAllChats = async (req, res) => {
                 username: 1,
                 name: 1,
                 avatar: 1,
-              },   
+              },
             },
           ],
         },
-        
+
       },
       {
         $lookup: {
@@ -332,20 +393,8 @@ export const getAllChats = async (req, res) => {
       },
     ];
 
-    const aggregatedChats = await Chat.aggregate(pipeline); 
-    const chats = aggregatedChats.map((chat)=>{
-      return {
-        ...chat,
-        membersInfo: undefined,
-        members: chat.members.map(member => ({
-          ...member,
-          ...chat.membersInfo.find(user => user._id.toString() === member.user.toString())
-        }))
-      }
-    })
-
-
-
+    const aggregatedChats = await Chat.aggregate(pipeline);
+    const chats = chatsWithMembers(aggregatedChats)
     return res.status(201).json({
       isSuccess: true,
       chats: chats,
@@ -438,24 +487,13 @@ export const getChatById = asyncHandler(async (req, res) => {
     throw new ApiError(400, "Chat not found");
   }
 
-  const chats = aggregatedChats.map((chat)=>{
-    return {
-      ...chat,
-      membersInfo: undefined,
-      members: chat.members.map(member => ({
-        ...member,
-        ...chat.membersInfo.find(user => user._id.toString() === member.user.toString())
-      }))
-    }
-  })
-
+  const chats = chatsWithMembers(aggregatedChats)
 
   return res.status(200).json({
     isSuccess: true,
     chat: chats[0],
   });
 });
-
 
 export const deleteChatById = async (req, res) => {
   const { chatId } = req.params;
@@ -572,8 +610,8 @@ export const chatUsers = asyncHandler(async (req, res) => {
 
 export const addGroupMembers = asyncHandler(async (req, res) => {
   const { chatId } = req.params;
-  const { newMembers } = req.body; // Expecting an array of user IDs in the request body
-  const { userId } = req.user;
+  const { newMembers } = req.body;
+  const { userId, name } = req.user;
 
   if (!checkObjectId(chatId)) {
     throw new ApiError(404, "Group not found");
@@ -619,6 +657,21 @@ export const addGroupMembers = asyncHandler(async (req, res) => {
 
   chat.members.push(...newMemberObjects);
   await chat.save();
+
+  const addedMembers = await User.find({ _id: { $in: newMembers } }, "name");
+  const addedNames = addedMembers.map((member) => member.name);
+  // Format member list for system message
+  const formattedNames = formatMemberList(addedNames);
+  const systemMessageContent = `${name} added ${formattedNames} to the group.`;
+  await createSystemMessage(
+    chatId,
+    userId,
+    null,
+    systemMessageContent,
+    newMembers,
+    "MEMBERS_ADDED",
+    req
+  );
 
   return res.status(200).json({
     isSuccess: true,
@@ -682,11 +735,9 @@ export const removeGroupMember = asyncHandler(async (req, res) => {
   });
 });
 
-
-
 export const removeGroupAvatar = asyncHandler(async (req, res) => {
   const {
-    user: { userId },
+    user: { userId, name },
     params: { chatId },
   } = req;
 
@@ -695,7 +746,7 @@ export const removeGroupAvatar = asyncHandler(async (req, res) => {
   let groupAvatar = chat.groupAvatar;
 
   if (groupAvatar && groupAvatar.publicId) {
-      await deleteFromCloudinary([groupAvatar.publicId]);
+    await deleteFromCloudinary([groupAvatar.publicId]);
   }
 
   groupAvatar = null;
@@ -708,10 +759,34 @@ export const removeGroupAvatar = asyncHandler(async (req, res) => {
     { new: true }
   );
 
+  const systemMessageContent = `${name} removed the group avatar`;
+
+  await createSystemMessage(
+    chatId,
+    userId,
+    null,
+    systemMessageContent,
+    [],
+    "AVATAR_REMOVED",
+    req
+  );
+
   return res.status(201).json({
     isSuccess: true,
     chat: updatedGroup,
   });
 });
 
+/**
+ * Helper function to format member names
+ * @param {Array} names - Array of member names
+ * @returns {string} - Formatted string
+ */
 
+
+const formatMemberList = (names) => {
+  if (names.length === 1) return names[0];
+  if (names.length === 2) return names.join(" and ");
+  const lastMember = names.pop();
+  return `${names.join(", ")} and ${lastMember}`;
+};
