@@ -35,9 +35,86 @@ const likeAggregate = {
   },
 };
 
-export const createPost = asyncHandler(async (req, res) => {
+
+
+export const createReels = asyncHandler(async (req, res) => {
   const { userId } = req.user;
   let { caption, aspectRatio } = req.body;
+
+  const hashtags = getHashtags(caption);
+
+  if (!req.files.length) {
+    throw new ApiError(404, "File is required");
+  }
+
+  const files = req.files.map((f) => ({
+    path: f.path,
+    isVideo: 'video',
+    aspectRatio,
+  }));
+
+  const images = await uploadMultipleOnCloudinary(
+    files,
+    `${userId}/reels`
+  );
+
+  if (!images || images.length === 0) {
+    throw new ApiError(404, "File is Required");
+  }
+  const newPost = {
+    caption,
+    images,
+    hashtags,
+    userId: userId,
+    postType: "REEL",
+  };
+  let post = new Post(newPost);
+  post = await post.save();
+
+  const posts = await Post.aggregate([
+    {
+      $match: {
+        _id: new mongoose.Types.ObjectId(post._id),
+      },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "user",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              name: 1,
+              avatar: 1,
+            },
+          },
+        ],
+      },
+    },
+    {
+      $addFields: {
+        user: { $first: "$user" },
+        isLiked: false,
+        like: 0,
+      },
+    },
+  ]);
+
+  return res.status(200).json({
+    post: posts[0],
+    message: "post created successfully",
+    isSuccess: true,
+  });
+});
+
+
+
+export const createPost = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
+  let { caption, aspectRatio, postType = 'POST' } = req.body;
 
   const hashtags = getHashtags(caption);
 
@@ -64,6 +141,7 @@ export const createPost = asyncHandler(async (req, res) => {
     images,
     hashtags,
     userId: userId,
+    postType
   };
   let post = new Post(newPost);
   post = await post.save();
@@ -115,6 +193,11 @@ export const fetchAllPosts = asyncHandler(async (req, res) => {
   const Id = new mongoose.Types.ObjectId(userId);
 
   const postAggregation = [
+    {
+      $match: {
+        postType: "POST",
+      }
+    },
     {
       $sort: { updatedAt: -1 },
     },
@@ -280,6 +363,74 @@ export const fetchAllPostsByUser = asyncHandler(async (req, res) => {
     {
       $match: {
         userId: new mongoose.Types.ObjectId(userId),
+        postType: "POST",
+      },
+    },
+    {
+      $sort: { updatedAt: -1 },
+    },
+    {
+      $lookup: {
+        from: "users",
+        localField: "userId",
+        foreignField: "_id",
+        as: "user",
+        pipeline: [
+          {
+            $project: {
+              username: 1,
+              name: 1,
+              avatar: 1,
+            },
+          },
+        ],
+      },
+    },
+    likeAggregate,
+    {
+      $lookup: {
+        from: "bookmarks",
+        localField: "_id",
+        foreignField: "postId",
+        as: "bookmark",
+      },
+    },
+    {
+      $addFields: {
+        user: { $first: "$user" },
+        isLiked: {
+          $in: [new mongoose.Types.ObjectId(userId), "$like.likedBy"],
+        },
+        isBookmarked: {
+          $in: [Id, "$bookmark.bookmarkedBy"],
+        },
+        like: { $size: "$like" },
+      },
+    },
+  ]);
+
+  const postsPaginated = await Post.aggregatePaginate(
+    postsAggregate,
+    getMongoosePaginationOptions({
+      limit,
+      page,
+      customLabels: { docs: "posts" },
+    })
+  );
+
+  return res.status(200).json({ ...postsPaginated, isSuccess: true });
+});
+
+export const fetchAllReelsByUser = asyncHandler(async (req, res) => {
+  const { userId } = req.user;
+  const page = parseInt(req.query.page) || 1;
+  const limit = parseInt(req.query.limit) || 9;
+  const Id = new mongoose.Types.ObjectId(userId);
+  const postsAggregate = Post.aggregate([
+    {
+      $match: {
+        userId: new mongoose.Types.ObjectId(userId),
+        postType: "REEL",
       },
     },
     {
@@ -347,6 +498,7 @@ export const fetchAllPostsByUserId = asyncHandler(async (req, res) => {
     {
       $match: {
         userId: new mongoose.Types.ObjectId(userId),
+        postType: "POST",
       },
     },
     {
@@ -577,6 +729,7 @@ export const getAllPosts = async (req, res) => {
 
   try {
     const totalPosts = await Post.aggregate([
+
       {
         $lookup: {
           from: "users", // Change to the appropriate collection name for users

@@ -32,7 +32,6 @@ const messageSchema = new mongoose.Schema(
         "GENERAL_MESSAGE",
         "GROUP_NAME_CHANGED"
       ],
-      default: null
     },
     attachments: {
       type: [String],
