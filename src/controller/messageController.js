@@ -98,14 +98,13 @@ const getMessageAggregate = (chat) => {
   ]
 }
 
-export const sendMessage = async (req, res) => {
+export const sendMessage = asyncHandler(async (req, res) => {
   const { userId: from } = req.user;
   const { chat } = req.params;
   const { text, messageType, to, post = null } = req.body;
 
   if (!text) throw new ApiError(404, "Empty message");
-  try {
-    const existingChat = await Chat.findById(chat);
+    const existingChat = await Chat.findById(chat).select("members lastMessage");
 
     if (!existingChat) {
       return res.status(404).json({
@@ -114,7 +113,7 @@ export const sendMessage = async (req, res) => {
       });
     }
     // Check if the user sending the message is a participant in the chat
-    const members = existingChat.members.map(m => m.user.toString())
+    const members = existingChat.members.map(m => m.user.toString());
 
     if (!members.includes(from)) {
       return res.status(403).json({
@@ -135,42 +134,25 @@ export const sendMessage = async (req, res) => {
 
     // Update the "lastMessage" field in the chat
     existingChat.lastMessage = newMessage;
-    await existingChat.save();
-
-    await newMessage.save();
-
+    await Promise.all([newMessage.save(), existingChat.save()]);
     const messageAggregate = await Message.aggregate(getMessageAggregate(chat));
-
     const message = messageAggregate[0]
-
-    await Chat.findByIdAndUpdate(
-      { _id: chat },
-      { lastMessage: message._id },
-      { new: true }
-    );
-
     const event = `chat:${chat}:message`
-
-    emitEvent(req, event, [...existingChat.members.filter(mem => mem.user.toString() !== from)], {
+    console.log({members})
+    const socketUsers = members.filter(mem => mem !== from)
+    emitEvent(req, event, socketUsers, {
       to,
       chat,
       from,
       message,
     });
 
-
     return res.status(200).json({
       isSuccess: true,
       chat,
       message
     });
-  } catch (error) {
-    return res.status(500).json({
-      error: error.message,
-      isSuccess: false,
-    });
-  }
-};
+});
 
 export const createSystemMessage = async (chatId, from, to, text, members, systemMessageType,req) => {
   try {
@@ -365,7 +347,7 @@ export const sendAttachments = async (req, res) => {
   const { messageType, to } = req.body;
 
   try {
-    const existingChat = await Chat.findById(chat);
+    const existingChat = await Chat.findById(chat).select("members lastMessage");
 
     if (!existingChat) {
       return res.status(404).json({
@@ -429,7 +411,10 @@ export const sendAttachments = async (req, res) => {
 
     const event = `chat:${chat}:message`
 
-    emitEvent(req, event, [...existingChat.members.filter(mem => mem.user.toString() !== from)], {
+    const socketUsers = existingChat.members.filter(mem => mem.user.toString() !== from).map((u)=>u.user.toString())
+
+
+    emitEvent(req, event, socketUsers, {
       to,
       chat,
       from,

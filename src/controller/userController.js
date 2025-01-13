@@ -23,6 +23,8 @@ import { FollowRequest } from "../models/followRequest.modal.js";
 import Message from "../models/message.modal.js";
 import Chat from "../models/chat.modal.js";
 import {
+  findUserByProperty,
+  findUserByUsername,
   generateAccessAndRefreshTokens,
   getMutualFriends,
 } from "../helpers/user.js";
@@ -32,14 +34,11 @@ const options = {
   secure: true,
 };
 
-const getUserAggregation = (userId, additionalFields = {}) => {
-  const Id = getObjectId(userId);
 
+const getUserAggregation = (filter, additionalFields = {}) => {
   return [
     {
-      $match: {
-        _id: Id,
-      },
+      $match: filter
     },
     {
       $project: {
@@ -93,14 +92,12 @@ const getUserAggregation = (userId, additionalFields = {}) => {
   ];
 };
 
-const getUserByUsernameAggregation = (username, userId) => {
+const getUserByUsernameAggregation = (filter, userId) => {
   const Id = getObjectId(userId);
 
   return [
     {
-      $match: {
-        username: username,
-      },
+      $match: filter
     },
     {
       $project: {
@@ -202,7 +199,7 @@ export const registerUser = asyncHandler(async (req, res) => {
       (feild) => !feild || feild.trim() === ""
     )
   ) {
-    throw new ApiError(400, "All feilds are required");
+    throw new ApiError(400, "All fields are required");
   }
   const existingUser = await User.findOne({
     $or: [{ username }, { email }],
@@ -211,7 +208,7 @@ export const registerUser = asyncHandler(async (req, res) => {
   if (existingUser) {
     throw new ApiError(
       409,
-      `User with ${username} and ${email} already exists`
+      `Username unavailable please enter different username`
     );
   }
 
@@ -248,15 +245,21 @@ export const registerUser = asyncHandler(async (req, res) => {
 
 export const loginUser = asyncHandler(async (req, res) => {
   const { username, password } = req.body;
+
+
+  if (!username && !password) {
+    throw new ApiError(400, `Please enter username and password`);
+  }
+
   const user = await User.findOne({ username })
     .select("username email name password avatar")
     .lean();
   if (!user) {
-    throw new ApiError(404, `user with ${username} not found`);
+    throw new ApiError(404, `Please enter valid username and password`);
   }
   const matchPassword = await bcrypt.compare(password, user.password);
   if (!matchPassword) {
-    throw new ApiError(404, "Incorrect username and password");
+    throw new ApiError(404, "`Please enter valid username and password");
   }
 
   const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
@@ -266,7 +269,7 @@ export const loginUser = asyncHandler(async (req, res) => {
   delete user?.refreshToken;
 
   return res
-    .status(201)
+    .status(200)
     .cookie("accessToken", accessToken, options)
     .cookie("refreshToken", refreshToken, options)
     .json({
@@ -279,11 +282,26 @@ export const loginUser = asyncHandler(async (req, res) => {
 
 export const getUser = asyncHandler(async (req, res) => {
   const { userId } = req.user;
+  const { username, name, email, id } = req.query;
 
-  const user = await User.aggregate(getUserAggregation(userId));
+  // Determine the filter
+  let filter = {};
+  if (username) {
+    filter.username = username;
+  } else if (name) {
+    filter.name = name;
+  } else if (email) {
+    filter.email = email;
+  } else if (id) {
+    filter._id = getObjectId(id);
+  } else {
+    filter._id = getObjectId(userId);
+  }
+
+  const user = await User.aggregate(getUserAggregation(filter));
 
   if (!user[0]) {
-    throw new ApiError(404, USERID_NOT_FOUND);
+    throw new ApiError(404, "User does not exits");
   }
   return handleSuccessResponse(res, { user: user[0] });
 });
@@ -293,7 +311,7 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
   const { userId } = req.user;
 
   const user = await User.aggregate(
-    getUserByUsernameAggregation(username, userId)
+    getUserByUsernameAggregation({username}, userId)
   );
 
   const mutualFriends = await getMutualFriends(user[0]._id, userId);
@@ -321,15 +339,15 @@ export const getUsers = asyncHandler(async (req, res) => {
         localField: "_id",
         foreignField: "followeeId",
         as: "followers",
-      },
-    },
-    {
-      $match: {
-        followers: {
-          $not: {
-            $elemMatch: { followerId: new mongoose.Types.ObjectId(userId) },
-          },
-        },
+        pipeline: [
+         { $match: {
+            followerId: {
+              $not: {
+                $elemMatch: { followerId: new mongoose.Types.ObjectId(userId) },
+              },
+            },
+          },}
+        ]
       },
     },
     {

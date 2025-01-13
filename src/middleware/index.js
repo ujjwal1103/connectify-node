@@ -20,7 +20,7 @@ export const upload = multer({
 });
 
 export const verifyToken = asyncHandler((req, res, next) => {
-  const token = req.header("Authorization");
+  const token = req.header("Authorization").replace("Bearer ", "");
   if (!token) {
     throw new ApiError(401, "Unauthorized: No token provided");
   }

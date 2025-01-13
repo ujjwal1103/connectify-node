@@ -41,7 +41,6 @@ export const getSockets = (users = []) => {
 export const emitEvent = (req, event, users, data) => {
   const io = req.app.get("io");
   const sockets = getSockets(users);
-
   io.to(sockets).emit(event, data);
 };
 

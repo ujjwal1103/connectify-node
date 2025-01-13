@@ -10,11 +10,10 @@ export const runSocket = () => {
   try {
     io.on("connection", (socket) => {
       const user = socket.user;
-      if (userSocketIDs.has(user?._id?.toString())) {
-        console.log('already connected')
-      }
+      // if (userSocketIDs.has(user?._id?.toString())) {
+      //   console.log('already connected')
+      // }
       userSocketIDs.set(user?._id?.toString(), socket.id);
-      console.log(userSocketIDs, user.username, 'connected')
       socket.on("Notification", (notify) => {
         if (notify) {
           const user = findUser(notify.to);

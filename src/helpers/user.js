@@ -85,3 +85,21 @@ export const getMutualFriends = async (visitingUserId, profileUserId) => {
     throw new Error("Something went wrong line5 helpers/user/getMutualFriends");
   }
 };
+
+
+export const findUserByUsername = async (username) => {
+  try {
+    const user = User.findOne({ username })
+    return user;
+  } catch (error) {
+    throw error;
+  }
+}
+export const findUserByProperty = async (key, value) => {
+  try {
+    const user = User.findOne({ [key]: value })
+    return user;
+  } catch (error) {
+    throw error;
+  }
+}
