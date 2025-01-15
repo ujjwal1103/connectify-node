@@ -16,7 +16,7 @@ import {
   deleteFromCloudinary,
   uploadOnCloudinary,
 } from "../utils/cloudinary.js";
-import { USERID_NOT_FOUND } from "../constants/index.js";
+import { USERID_NOT_FOUND, UserLoginType } from "../constants/index.js";
 import Like from "../models/like.model.js";
 import Comment from "../models/comment.modal.js";
 import { FollowRequest } from "../models/followRequest.modal.js";
@@ -193,54 +193,112 @@ const getUserByUsernameAggregation = (filter, userId) => {
 };
 
 export const registerUser = asyncHandler(async (req, res) => {
-  const { username, password, email, name } = req.body;
-  if (
-    [username, password, email, name].some(
-      (feild) => !feild || feild.trim() === ""
-    )
-  ) {
-    throw new ApiError(400, "All fields are required");
-  }
-  const existingUser = await User.findOne({
-    $or: [{ username }, { email }],
-  });
+  const { username, password, email, name, verified_email } = req.body;
+  const { provider } = req.query
 
-  if (existingUser) {
-    throw new ApiError(
-      409,
-      `Username unavailable please enter different username`
-    );
-  }
+  if (provider === 'GOOGLE') {
+    if (
+      [username, email, name].some(
+        (feild) => !feild || feild.trim() === ""
+      )
+    ) {
+      throw new ApiError(400, "All fields are required");
+    }
 
-  const salt = bcrypt.genSaltSync(10);
-  const hash = bcrypt.hashSync(password, salt);
-
-  await User.create({
-    email,
-    password: hash,
-    name,
-    username: username.toLowerCase(),
-  });
-
-  const user = await User.findOne({ username: username?.toLowerCase() })
-    .select("username email name")
-    .lean();
-
-  const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
-    user?._id
-  );
-
-  return res
-    .status(201)
-    .cookie("accessToken", accessToken, options)
-    .cookie("refreshToken", refreshToken, options)
-    .json({
-      user,
-      isSuccess: true,
-      message: `Welcome To connectify : ${user.username}`,
-      accessToken: accessToken,
-      refreshToken: refreshToken,
+    const existingUser = await User.findOne({
+      $or: [{ username }, { email }],
     });
+
+    if (existingUser) {
+      throw new ApiError(
+        409,
+        `Username unavailable please enter different username`
+      );
+    }
+
+    await User.create({
+      loginType: UserLoginType.GOOGLE,
+      email,
+      name,
+      username: username.toLowerCase(),
+      isEmailVerified: verified_email
+    });
+
+    const user = await User.findOne({ username: username?.toLowerCase() })
+      .select("username email name")
+      .lean();
+
+    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+      user?._id
+    );
+
+    return res
+      .status(201)
+      .cookie("accessToken", accessToken, options)
+      .cookie("refreshToken", refreshToken, options)
+      .json({
+        user,
+        isSuccess: true,
+        message: `Welcome To connectify : ${user.username}`,
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      });
+
+  } else {
+
+    if (
+      [username, password, email, name].some(
+        (feild) => !feild || feild.trim() === ""
+      )
+    ) {
+      throw new ApiError(400, "All fields are required");
+    }
+
+    const existingUser = await User.findOne({
+      $or: [{ username }, { email }],
+    });
+
+    if (existingUser) {
+      throw new ApiError(
+        409,
+        `Username unavailable please enter different username`
+      );
+    }
+
+    const salt = bcrypt.genSaltSync(10);
+    const hash = bcrypt.hashSync(password, salt);
+
+    await User.create({
+      email,
+      password: hash,
+      name,
+      username: username.toLowerCase(),
+    });
+
+    const user = await User.findOne({ username: username?.toLowerCase() })
+      .select("username email name")
+      .lean();
+
+    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+      user?._id
+    );
+
+    return res
+      .status(201)
+      .cookie("accessToken", accessToken, options)
+      .cookie("refreshToken", refreshToken, options)
+      .json({
+        user,
+        isSuccess: true,
+        message: `Welcome To connectify : ${user.username}`,
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      });
+  }
+
+
+
+
 });
 
 export const loginUser = asyncHandler(async (req, res) => {
@@ -311,7 +369,7 @@ export const getUserByUsername = asyncHandler(async (req, res) => {
   const { userId } = req.user;
 
   const user = await User.aggregate(
-    getUserByUsernameAggregation({username}, userId)
+    getUserByUsernameAggregation({ username }, userId)
   );
 
   const mutualFriends = await getMutualFriends(user[0]._id, userId);
@@ -340,13 +398,15 @@ export const getUsers = asyncHandler(async (req, res) => {
         foreignField: "followeeId",
         as: "followers",
         pipeline: [
-         { $match: {
-            followerId: {
-              $not: {
-                $elemMatch: { followerId: new mongoose.Types.ObjectId(userId) },
+          {
+            $match: {
+              followerId: {
+                $not: {
+                  $elemMatch: { followerId: new mongoose.Types.ObjectId(userId) },
+                },
               },
             },
-          },}
+          }
         ]
       },
     },
@@ -703,7 +763,26 @@ export const googleAuthenticate = asyncHandler(async (req, res) => {
     return res.status(403).send("Google account is not verified");
   }
 
-  const existingUser = await User.findOne({ email: googleUser.email });
+  const existingUser = await User.findOne({ email: googleUser.email }).select("username email name password avatar").lean();
+
+  if (existingUser) {
+    const { accessToken, refreshToken } = await generateAccessAndRefreshTokens(
+      existingUser?._id
+    );
+    delete existingUser.password;
+    delete existingUser?.refreshToken;
+
+    return res
+      .status(200)
+      .cookie("accessToken", accessToken, options)
+      .cookie("refreshToken", refreshToken, options)
+      .json({
+        existingUser: existingUser,
+        isSuccess: true,
+        accessToken: accessToken,
+        refreshToken: refreshToken,
+      });
+  }
 
   return res
     .status(201)

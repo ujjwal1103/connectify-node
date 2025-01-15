@@ -28,6 +28,7 @@ const userSchema = new mongoose.Schema(
       required: [true, "email is required"],
       trim: true,
       lowercase: true,
+      index: true,
     },
     isEmailVerified: {
       type: Boolean,
@@ -43,9 +44,11 @@ const userSchema = new mongoose.Schema(
     },
     password: {
       type: String,
-      required: true,
+      required: function () {
+        // Use a regular function to access `this` correctly
+        return this.loginType === UserLoginType.EMAIL_PASSWORD;
+      },
     },
-
     dateOfBirth: {
       type: Date,
     },
@@ -77,6 +80,7 @@ const userSchema = new mongoose.Schema(
     name: {
       type: String,
       trim: true,
+      index: true,
     },
     isPrivate: {
       type: Boolean,
